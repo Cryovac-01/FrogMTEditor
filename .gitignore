@@ -1,0 +1,39 @@
+# Python runtime (users download separately)
+source/python/
+
+# Compiled / built files
+FrogModEditor.exe
+*.pyc
+__pycache__/
+
+# Archives
+*.7z
+*.zip
+*.rar
+
+# Backups
+source/backups/
+*.bak
+
+# User-generated mod output
+source/data/mod/MotorTown/Content/Cars/
+source/data/mod/site_engines.json
+source/data/mod/site_tires.json
+
+# OS files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Old launcher artifacts
+python311._pth
+__launcher__.py
+source/DLLs/
+source/launcher_stub.pyw
+source/build_launcher_exe.py

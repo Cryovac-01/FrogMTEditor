@@ -1,0 +1,125 @@
+{
+  "generator": "pillow_technical_illustration_v3",
+  "scene_size": {
+    "width": 2560,
+    "height": 1440
+  },
+  "assets": [
+    {
+      "scene": "engine_blueprint",
+      "seed": 71811,
+      "prompt": "Use case: ui-mockup. Asset type: enterprise desktop illustration. Primary request: precise engine blueprint board with restrained glass telemetry, dark slate panels, subtle green accent, cyan analytical highlights, and no text.",
+      "outputs": [
+        {
+          "filename": "welcome_hero.png",
+          "crop": {
+            "left": 160,
+            "top": 120,
+            "right": 2380,
+            "bottom": 1322
+          },
+          "size": {
+            "width": 960,
+            "height": 520
+          }
+        },
+        {
+          "filename": "create_engine_scene.png",
+          "crop": {
+            "left": 720,
+            "top": 320,
+            "right": 1920,
+            "bottom": 1020
+          },
+          "size": {
+            "width": 560,
+            "height": 320
+          }
+        },
+        {
+          "filename": "curve_banner.png",
+          "crop": {
+            "left": 1340,
+            "top": 490,
+            "right": 2340,
+            "bottom": 848
+          },
+          "size": {
+            "width": 620,
+            "height": 220
+          }
+        },
+        {
+          "filename": "header_mesh.png",
+          "crop": {
+            "left": 770,
+            "top": 550,
+            "right": 1950,
+            "bottom": 900
+          },
+          "size": {
+            "width": 640,
+            "height": 180
+          }
+        },
+        {
+          "filename": "sidebar_signal.png",
+          "crop": {
+            "left": 235,
+            "top": 168,
+            "right": 840,
+            "bottom": 460
+          },
+          "size": {
+            "width": 320,
+            "height": 120
+          }
+        }
+      ]
+    },
+    {
+      "scene": "tire_blueprint",
+      "seed": 71812,
+      "prompt": "Use case: ui-mockup. Asset type: enterprise desktop illustration. Primary request: technical tire and wheel detail board with measured linework, restrained green accents, cool cyan analysis highlights, and no text.",
+      "outputs": [
+        {
+          "filename": "create_tire_scene.png",
+          "crop": {
+            "left": 420,
+            "top": 240,
+            "right": 1900,
+            "bottom": 1100
+          },
+          "size": {
+            "width": 560,
+            "height": 320
+          }
+        }
+      ]
+    },
+    {
+      "scene": "audio_board",
+      "seed": 71813,
+      "prompt": "Use case: ui-mockup. Asset type: enterprise desktop illustration. Primary request: premium audio control board with clean waveform monitors, mixer strips, dark technical surfaces, restrained green and cyan accents, and no text.",
+      "outputs": [
+        {
+          "filename": "audio_banner.png",
+          "crop": {
+            "left": 980,
+            "top": 640,
+            "right": 2360,
+            "bottom": 1130
+          },
+          "size": {
+            "width": 620,
+            "height": 220
+          }
+        }
+      ]
+    }
+  ],
+  "brand_mark": {
+    "filename": "brand_mark.png",
+    "generator": "pillow_technical_illustration_v3"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "modifications": {
+    "Policy1": {
+      "cost": 100,
+      "effect_value": 0.2,
+      "display_name": "Fuel Subsidy 20%"
+    }
+  },
+  "new_policies": []
+}
