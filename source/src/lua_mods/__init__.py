@@ -119,6 +119,7 @@ def _ensure_loaded() -> None:
     from . import cargo_scaling                 # noqa: F401
     from . import company_vehicle_care          # noqa: F401
     from . import company_vehicle_limits        # noqa: F401
+    from . import exp_multiplier                # noqa: F401
     from . import population_boost              # noqa: F401
     from . import skip_night                    # noqa: F401
     from . import slow_decay                    # noqa: F401
