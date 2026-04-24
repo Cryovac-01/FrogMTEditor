@@ -420,18 +420,26 @@ class _ModCard(QtWidgets.QFrame):
 
         hl.addStretch(1)
 
-        self._expand_btn = QtWidgets.QPushButton("\u25BC")
-        self._expand_btn.setFixedSize(26, 26)
-        self._expand_btn.setToolTip("Expand / collapse configuration.")
+        self._expand_btn = QtWidgets.QPushButton()
+        self._expand_btn.setFixedHeight(28)
+        self._expand_btn.setMinimumWidth(110)
+        self._expand_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self._expand_btn.setToolTip("Show or hide this mod's configuration.")
         self._expand_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {_CARD};
                 color: {_TEXT};
                 border: 1px solid {_BORDER};
                 border-radius: 4px;
-                font-size: 11px;
+                padding: 0 12px;
+                font-size: 12px;
+                font-weight: 600;
+                text-align: center;
             }}
-            QPushButton:hover {{ background: {_BORDER}; }}
+            QPushButton:hover {{
+                background: {_BORDER};
+                border-color: {_ACCENT};
+            }}
         """)
         self._expand_btn.clicked.connect(self._toggle_expanded)
         hl.addWidget(self._expand_btn)
@@ -526,12 +534,22 @@ class _ModCard(QtWidgets.QFrame):
 
         root.addWidget(self._body)
         self._body.setVisible(False)
+        self._refresh_expand_label()
 
     # ------------------------------------------------------------------
     def _toggle_expanded(self) -> None:
         self._expanded = not self._expanded
         self._body.setVisible(self._expanded)
-        self._expand_btn.setText("\u25B2" if self._expanded else "\u25BC")
+        self._refresh_expand_label()
+
+    def _refresh_expand_label(self) -> None:
+        # Unicode arrows kept alongside the text so users also get a
+        # visual cue. When expanded, the body is visible so "Collapse ▲".
+        # When collapsed, "Expand ▼".
+        if self._expanded:
+            self._expand_btn.setText("Collapse \u25B2")
+        else:
+            self._expand_btn.setText("Expand \u25BC")
 
     def set_expanded(self, value: bool) -> None:
         if value != self._expanded:
