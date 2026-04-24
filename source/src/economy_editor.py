@@ -346,19 +346,38 @@ def load_mod_balance_json() -> Optional[Dict[str, Any]]:
 
 
 def get_cargo_payments(vanilla: bool = True) -> Dict[str, float]:
-    """Get cargo payment multipliers from Balance.json Cargo.PaymentMultipliers.
+    """Get cargo payment multipliers for every cargo in the game.
 
-    Returns only the explicit vanilla entries (~65 rows) or the modded
-    equivalent. The per-vehicle capacity penalty lives in the
-    Cargos_01 DataTable and is controlled by the CryovacCargoScaling
-    Lua mod (see src/cargo_scaling_deployer.py), not this file.
+    Vanilla Motor Town ships Balance.json with explicit PaymentMultipliers
+    for only 65 of the 90 cargo rows in the Cargos_01 DataTable. The
+    missing 25 rows (IronOre, Cement, CopperOre, Tank_250kL, the two
+    Transformers, etc.) fall back to 1.0× at runtime because they have
+    no entry.
+
+    The UI cargo table iterates this dict, so returning only the 65
+    explicit entries means those 25 rows are invisible in the editor —
+    users can't see their values or override them. We merge in every
+    row from cargos.json (the live DataTable dump) with 1.0× as the
+    implicit baseline so all 90 cargos are editable.
+
+    When vanilla=False, return just the modded dict as-written.
     """
     if not vanilla:
         modded = load_mod_balance_json()
         if modded:
             return modded.get('Cargo', {}).get('PaymentMultipliers', {})
     data = load_vanilla_balance_json()
-    return dict(data.get('Cargo', {}).get('PaymentMultipliers', {}))
+    explicit = dict(data.get('Cargo', {}).get('PaymentMultipliers', {}))
+    dump = load_vanilla_cargo_dump()
+    if not dump:
+        return explicit
+    merged: Dict[str, float] = {}
+    for cargo_name in dump:
+        merged[cargo_name] = explicit.get(cargo_name, _IMPLICIT_PAYMENT_MULTIPLIER)
+    # Keep any Balance.json entries the dump doesn't know about.
+    for cargo_name, value in explicit.items():
+        merged.setdefault(cargo_name, value)
+    return merged
 
 
 def get_cargo_row_info(cargo_name: str) -> Dict[str, Any]:
@@ -370,21 +389,27 @@ def get_cargo_row_info(cargo_name: str) -> Dict[str, Any]:
 
 
 def apply_cargo_multiplier(multiplier: float) -> Dict[str, Any]:
-    """Apply a global multiplier to every Balance.json cargo payment and save.
+    """Apply a global multiplier to every cargo in the game and save.
 
-    Simple scalar: modded_value = vanilla_value × multiplier. Covers the
-    ~65 cargo rows that have explicit PaymentMultipliers entries. The
-    per-vehicle capacity penalty (pickup-vs-box-truck spread) is a
-    different axis, handled by CryovacCargoScaling Lua mod, not here.
+    Writes an explicit PaymentMultipliers entry for all 90 rows known
+    to the editor (65 from Balance.json + 25 implicit-1.0× rows from
+    cargos.json). Without this, rows like IronOre, Cement, Transformer_20MVA
+    would silently stay at 1.0× regardless of the economy slider.
+
+    The per-vehicle capacity penalty is a different axis, handled by
+    the CryovacCargoScaling Lua mod.
     """
     vanilla = load_vanilla_balance_json()
     modified = copy.deepcopy(vanilla)
 
     cargo_section = modified.setdefault('Cargo', {})
     cargo_payments = cargo_section.setdefault('PaymentMultipliers', {})
-    vanilla_payments = vanilla.get('Cargo', {}).get('PaymentMultipliers', {})
 
-    for cargo_name, base_value in vanilla_payments.items():
+    # Full 90-row view (explicit + implicit-1.0×). Write every row so
+    # previously-implicit cargos participate in the global multiplier.
+    full_view = get_cargo_payments(vanilla=True)
+
+    for cargo_name, base_value in full_view.items():
         cargo_payments[cargo_name] = round(base_value * multiplier, 6)
 
     modified['Cargo']['PaymentMultipliers'] = cargo_payments
