@@ -558,16 +558,43 @@ def _scale_ini_array_field(content: str, field_name: str,
                            multiplier: float) -> str:
     """Scale numeric values inside an INI array field like ((Key, Value),...).
 
-    Finds each (Key, Value) pair for the given field and replaces the value
-    with vanilla_value * multiplier.
+    IMPORTANT: scopes all (Key, Value) substitutions to the specific
+    field_name's block. Earlier versions used an unscoped regex which
+    caused keys shared across fields (e.g. 'Pickup' appears in both
+    VehicleOwnerProfitShare and RentalCostMultiplier) to be substituted
+    in every matching spot. That silently wrecked RentalCostMultiplier
+    values any time the profit-share preset ran with a non-1.0 factor.
     """
+    # Find the opening `field_name=((` — require a word boundary before
+    # the field name so e.g. `VehicleSpawnCostByTruckClass` doesn't
+    # accidentally prefix-match a field called `SpawnCostByTruckClass`.
+    m = re.search(rf'\b{re.escape(field_name)}=\(\(', content)
+    if not m:
+        return content
+    block_start = m.end() - 2  # position of the opening `((`
+
+    # Walk paren depth forward to find the matching closing `))`.
+    depth = 0
+    i = block_start
+    while i < len(content):
+        c = content[i]
+        if c == '(':
+            depth += 1
+        elif c == ')':
+            depth -= 1
+            if depth == 0:
+                i += 1  # include the closing `)`
+                break
+        i += 1
+
+    block = content[block_start:i]
+    new_block = block
     for key, base_val in vanilla_values.items():
         new_val = base_val * multiplier
-        # Match (Key, <number>) inside the field
-        pattern = rf'(\({key},\s*)[0-9]+(?:\.[0-9]+)?(\))'
-        replacement = rf'\g<1>{new_val:.6f}\2'
-        content = re.sub(pattern, replacement, content)
-    return content
+        kp = rf'(\({re.escape(key)},\s*)[0-9]+(?:\.[0-9]+)?(\))'
+        new_block = re.sub(kp, rf'\g<1>{new_val:.6f}\2', new_block)
+
+    return content[:block_start] + new_block + content[i:]
 
 
 def apply_profit_share_multiplier(multiplier: float) -> Dict[str, Any]:
