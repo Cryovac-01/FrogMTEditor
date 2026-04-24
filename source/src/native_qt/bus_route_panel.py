@@ -517,9 +517,21 @@ def export_route_json(route_name: str, stop_ids: List[str], route_guid: str = No
 # Map Widget (QPainter-based)
 # ---------------------------------------------------------------------------
 class JejuMapWidget(QtWidgets.QWidget):
-    """Interactive map widget showing bus stops and routes on Jeju Island."""
+    """Interactive map widget showing bus stops and routes on Jeju Island.
+
+    Supports zoom (mouse wheel or the three overlay buttons) and pan
+    (middle-click drag, or Shift + left-click drag). Keyboard shortcuts:
+    + zoom in, - zoom out, 0 reset view.
+    """
 
     stop_clicked = QtCore.Signal(str)  # emits stop ID when clicked
+
+    # Zoom limits — 1.0 = full island fits the widget, 10.0 = tight closeup.
+    ZOOM_MIN = 1.0
+    ZOOM_MAX = 10.0
+    # Multiplicative factor per wheel tick (1.2 ≈ 20% per notch).
+    ZOOM_STEP = 1.2
+    _MARGIN = 20
 
     def __init__(self, parent: QtWidgets.QWidget = None) -> None:
         super().__init__(parent)
@@ -529,11 +541,20 @@ class JejuMapWidget(QtWidgets.QWidget):
             QtWidgets.QSizePolicy.Policy.Expanding,
         )
         self.setMouseTracking(True)
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self._route_stops: List[str] = []
         self._hover_stop: Optional[str] = None
         self._selected_stops: set = set()
-        self._scale = 1.0
-        self._offset = QtCore.QPointF(0, 0)
+
+        # View state — user zoom (1.0 = fit) and the game-space coord the
+        # widget centers on. Pan is represented by moving view_center, not
+        # by an offset, so zoom-at-cursor math stays trivially invertible.
+        self._user_zoom: float = 1.0
+        self._view_center: QtCore.QPointF = QtCore.QPointF(2048.0, 2048.0)
+
+        # Pan-drag state
+        self._panning: bool = False
+        self._pan_last: QtCore.QPointF = QtCore.QPointF()
 
         # Load the real map image
         self._map_pixmap: Optional[QtGui.QPixmap] = None
@@ -545,6 +566,23 @@ class JejuMapWidget(QtWidgets.QWidget):
             if os.path.isfile(alt):
                 self._map_pixmap = QtGui.QPixmap(alt)
 
+        # Overlay zoom controls (top-right corner, repositioned on resize).
+        # Icons are vector-drawn via QPainter rather than unicode glyphs
+        # so they render identically regardless of system-font coverage
+        # (U+2212 MINUS and U+2302 HOUSE aren't in every Windows font).
+        self._zoom_in_btn = self._make_overlay_button(
+            'zoom_in', "Zoom in (mouse wheel up)")
+        self._zoom_out_btn = self._make_overlay_button(
+            'zoom_out', "Zoom out (mouse wheel down)")
+        self._zoom_reset_btn = self._make_overlay_button(
+            'fit', "Fit to view (keyboard: 0)")
+        self._zoom_in_btn.clicked.connect(lambda: self._zoom_around_center(self.ZOOM_STEP))
+        self._zoom_out_btn.clicked.connect(lambda: self._zoom_around_center(1.0 / self.ZOOM_STEP))
+        self._zoom_reset_btn.clicked.connect(self.reset_view)
+
+    # ------------------------------------------------------------------
+    # Public view controls
+    # ------------------------------------------------------------------
     def set_route(self, stop_ids: List[str]) -> None:
         self._route_stops = stop_ids
         self._selected_stops = set(stop_ids)
@@ -555,28 +593,184 @@ class JejuMapWidget(QtWidgets.QWidget):
         self._selected_stops = set()
         self.update()
 
+    def reset_view(self) -> None:
+        """Restore zoom=1, centered on the map."""
+        self._user_zoom = 1.0
+        self._view_center = QtCore.QPointF(2048.0, 2048.0)
+        self.update()
+
+    # ------------------------------------------------------------------
+    # Overlay controls
+    # ------------------------------------------------------------------
+    def _make_overlay_button(self, role: str, tooltip: str) -> QtWidgets.QPushButton:
+        btn = QtWidgets.QPushButton(self)
+        btn.setToolTip(tooltip)
+        btn.setFixedSize(28, 28)
+        btn.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        # Draw the icon ourselves so we don't depend on any particular
+        # font shipping a given codepoint. 18px glyph inside a 28px button.
+        btn.setIcon(self._render_overlay_icon(role, 18))
+        btn.setIconSize(QtCore.QSize(18, 18))
+        btn.setStyleSheet(
+            "QPushButton {"
+            " background: rgba(20, 30, 40, 0.85);"
+            f" border: 1px solid {_BORDER};"
+            " border-radius: 4px; }"
+            "QPushButton:hover { background: rgba(40, 60, 80, 0.95); }"
+            "QPushButton:pressed { background: rgba(80, 120, 160, 0.95); }"
+        )
+        return btn
+
+    @staticmethod
+    def _render_overlay_icon(role: str, size: int) -> QtGui.QIcon:
+        """Vector-draw a zoom-in (plus), zoom-out (minus), or fit-to-view
+        (square with inward corners) icon. Font-independent, so the
+        buttons never render as blank glyph-fallback squares."""
+        pix = QtGui.QPixmap(size, size)
+        pix.fill(QtCore.Qt.GlobalColor.transparent)
+        p = QtGui.QPainter(pix)
+        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        pen = QtGui.QPen(QtGui.QColor(_TEXT))
+        pen.setWidthF(2.0)
+        pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        c = size / 2.0
+        arm = size * 0.30   # distance from center to each end of the cross
+
+        if role == 'zoom_in':
+            p.drawLine(QtCore.QPointF(c - arm, c), QtCore.QPointF(c + arm, c))
+            p.drawLine(QtCore.QPointF(c, c - arm), QtCore.QPointF(c, c + arm))
+        elif role == 'zoom_out':
+            p.drawLine(QtCore.QPointF(c - arm, c), QtCore.QPointF(c + arm, c))
+        elif role == 'fit':
+            # Outer square representing the view frame, with four small
+            # inward-pointing corner ticks (classic "fit to view" icon).
+            m = size * 0.18
+            r = QtCore.QRectF(m, m, size - 2 * m, size - 2 * m)
+            p.drawRect(r)
+            tick = size * 0.10
+            # Top-left corner tick pointing inward
+            p.drawLine(QtCore.QPointF(r.left(), r.top() + tick),
+                       QtCore.QPointF(r.left() + tick, r.top()))
+            # Top-right
+            p.drawLine(QtCore.QPointF(r.right(), r.top() + tick),
+                       QtCore.QPointF(r.right() - tick, r.top()))
+            # Bottom-left
+            p.drawLine(QtCore.QPointF(r.left(), r.bottom() - tick),
+                       QtCore.QPointF(r.left() + tick, r.bottom()))
+            # Bottom-right
+            p.drawLine(QtCore.QPointF(r.right(), r.bottom() - tick),
+                       QtCore.QPointF(r.right() - tick, r.bottom()))
+        p.end()
+        return QtGui.QIcon(pix)
+
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
+        super().resizeEvent(event)
+        # Stack overlay zoom buttons vertically in the top-right corner.
+        pad = 8
+        bw = self._zoom_in_btn.width()
+        bh = self._zoom_in_btn.height()
+        x = self.width() - pad - bw
+        y = pad
+        self._zoom_in_btn.move(x, y)
+        y += bh + 4
+        self._zoom_out_btn.move(x, y)
+        y += bh + 4
+        self._zoom_reset_btn.move(x, y)
+
+    # ------------------------------------------------------------------
+    # Coordinate transforms
+    # ------------------------------------------------------------------
+    def _fit_scale(self) -> float:
+        """Pixel-per-game-unit at zoom=1 — whole 4096x4096 map fits the widget."""
+        w = self.width()
+        h = self.height()
+        sx = (w - 2 * self._MARGIN) / 4096.0
+        sy = (h - 2 * self._MARGIN) / 4096.0
+        return max(0.0001, min(sx, sy))
+
+    def _effective_scale(self) -> float:
+        return self._fit_scale() * self._user_zoom
+
     def _map_to_widget(self, mx: float, my: float) -> QtCore.QPointF:
         """Convert game coords (0-4096) to widget pixel coords. Y is inverted."""
-        w = self.width()
-        h = self.height()
-        margin = 20
-        sx = (w - 2 * margin) / 4096.0
-        sy = (h - 2 * margin) / 4096.0
-        scale = min(sx, sy)
-        ox = margin + (w - 2 * margin - 4096 * scale) / 2
-        oy = margin + (h - 2 * margin - 4096 * scale) / 2
-        return QtCore.QPointF(ox + mx * scale, oy + (4096 - my) * scale)
+        scale = self._effective_scale()
+        dx_game = mx - self._view_center.x()
+        dy_game = my - self._view_center.y()
+        return QtCore.QPointF(
+            self.width() / 2 + dx_game * scale,
+            self.height() / 2 - dy_game * scale,  # y flipped
+        )
 
     def _widget_to_map(self, wx: float, wy: float) -> Tuple[float, float]:
-        w = self.width()
-        h = self.height()
-        margin = 20
-        sx = (w - 2 * margin) / 4096.0
-        sy = (h - 2 * margin) / 4096.0
-        scale = min(sx, sy)
-        ox = margin + (w - 2 * margin - 4096 * scale) / 2
-        oy = margin + (h - 2 * margin - 4096 * scale) / 2
-        return ((wx - ox) / scale, 4096 - (wy - oy) / scale)
+        scale = self._effective_scale()
+        dx_pix = wx - self.width() / 2
+        dy_pix = wy - self.height() / 2
+        return (
+            self._view_center.x() + dx_pix / scale,
+            self._view_center.y() - dy_pix / scale,
+        )
+
+    # ------------------------------------------------------------------
+    # Zoom / pan math
+    # ------------------------------------------------------------------
+    def _zoom_at(self, new_zoom: float, anchor: QtCore.QPointF) -> None:
+        """Set zoom such that the game coord currently under `anchor`
+        (widget-space pixel point) stays under `anchor` after the zoom."""
+        new_zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, new_zoom))
+        if abs(new_zoom - self._user_zoom) < 1e-6:
+            return
+        # Game-space point that should stay fixed under the anchor pixel.
+        anchor_game_x, anchor_game_y = self._widget_to_map(anchor.x(), anchor.y())
+        self._user_zoom = new_zoom
+        # Solve for the new view_center that keeps anchor_game under the anchor pixel.
+        new_scale = self._effective_scale()
+        dx_pix = anchor.x() - self.width() / 2
+        dy_pix = anchor.y() - self.height() / 2
+        self._view_center = QtCore.QPointF(
+            anchor_game_x - dx_pix / new_scale,
+            anchor_game_y + dy_pix / new_scale,
+        )
+        self._clamp_view_center()
+        self.update()
+
+    def _zoom_around_center(self, factor: float) -> None:
+        center = QtCore.QPointF(self.width() / 2, self.height() / 2)
+        self._zoom_at(self._user_zoom * factor, center)
+
+    def _clamp_view_center(self) -> None:
+        """Keep the view center inside the game-space rectangle so the
+        user can't pan the map completely off-screen."""
+        x = max(0.0, min(4096.0, self._view_center.x()))
+        y = max(0.0, min(4096.0, self._view_center.y()))
+        self._view_center = QtCore.QPointF(x, y)
+
+    # ------------------------------------------------------------------
+    # Input events
+    # ------------------------------------------------------------------
+    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+        delta = event.angleDelta().y()
+        if delta == 0:
+            return
+        factor = self.ZOOM_STEP if delta > 0 else 1.0 / self.ZOOM_STEP
+        self._zoom_at(self._user_zoom * factor, QtCore.QPointF(event.position()))
+        event.accept()
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+        k = event.key()
+        if k in (QtCore.Qt.Key.Key_Plus, QtCore.Qt.Key.Key_Equal):
+            self._zoom_around_center(self.ZOOM_STEP)
+            event.accept()
+            return
+        if k in (QtCore.Qt.Key.Key_Minus, QtCore.Qt.Key.Key_Underscore):
+            self._zoom_around_center(1.0 / self.ZOOM_STEP)
+            event.accept()
+            return
+        if k == QtCore.Qt.Key.Key_0:
+            self.reset_view()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         p = QtGui.QPainter(self)
@@ -681,7 +875,7 @@ class JejuMapWidget(QtWidgets.QWidget):
         p.end()
 
     def _draw_legend(self, p: QtGui.QPainter) -> None:
-        x, y = 10, self.height() - 90
+        x, y = 10, self.height() - 110
         font = p.font()
         font.setPointSize(9)
         p.setFont(font)
@@ -700,10 +894,34 @@ class JejuMapWidget(QtWidgets.QWidget):
             p.drawText(x + 16, y + 11, label)
             y += 20
 
+        # Zoom readout + navigation hint.
+        p.setPen(QtGui.QColor(_MUTED))
+        p.drawText(x, y + 11, f"Zoom: {self._user_zoom:.1f}\u00d7  \u2014  "
+                              f"wheel zooms, middle-click or Shift+drag pans, 0 resets")
+
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        # If a pan-drag is in progress, translate view_center by the
+        # game-space equivalent of the mouse delta and skip hover logic.
+        if self._panning:
+            pos = QtCore.QPointF(event.position())
+            delta = pos - self._pan_last
+            scale = self._effective_scale()
+            if scale > 0:
+                self._view_center = QtCore.QPointF(
+                    self._view_center.x() - delta.x() / scale,
+                    self._view_center.y() + delta.y() / scale,  # y flipped
+                )
+                self._clamp_view_center()
+            self._pan_last = pos
+            self.update()
+            return
+
+        # Hover detection — hit radius scales down with zoom so the
+        # catch zone stays constant in on-screen pixels.
         mx, my = self._widget_to_map(event.position().x(), event.position().y())
+        hit_radius = 80.0 / max(1.0, self._user_zoom)
         closest = None
-        closest_dist = 80  # threshold in game units
+        closest_dist = hit_radius
         for stop in BUS_STOPS:
             d = math.sqrt((stop["x"] - mx) ** 2 + (stop["y"] - my) ** 2)
             if d < closest_dist:
@@ -719,8 +937,32 @@ class JejuMapWidget(QtWidgets.QWidget):
             self.update()
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
-        if self._hover_stop:
+        # Middle-click or Shift+left-click starts a pan-drag.
+        is_shift_left = (
+            event.button() == QtCore.Qt.MouseButton.LeftButton
+            and bool(event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier)
+        )
+        if event.button() == QtCore.Qt.MouseButton.MiddleButton or is_shift_left:
+            self._panning = True
+            self._pan_last = QtCore.QPointF(event.position())
+            self.setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+        # Normal left-click selects the hovered stop.
+        if event.button() == QtCore.Qt.MouseButton.LeftButton and self._hover_stop:
             self.stop_clicked.emit(self._hover_stop)
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+        if self._panning and event.button() in (
+            QtCore.Qt.MouseButton.MiddleButton,
+            QtCore.Qt.MouseButton.LeftButton,
+        ):
+            self._panning = False
+            self.setCursor(
+                QtCore.Qt.CursorShape.PointingHandCursor if self._hover_stop
+                else QtCore.Qt.CursorShape.ArrowCursor
+            )
+            event.accept()
 
 
 # ---------------------------------------------------------------------------
