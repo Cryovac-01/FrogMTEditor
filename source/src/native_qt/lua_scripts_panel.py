@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from lua_mods import all_deployers, DEFAULT_OUTPUT_DIR, Setting
+from lua_mods._shared import write_mods_txt
 
 logger = logging.getLogger(__name__)
 
@@ -112,22 +113,25 @@ UE4SS, the game simply won't see these mods &mdash; it loads vanilla.</p>
 <p>When you click <b>Deploy enabled Lua mods</b>, each enabled mod is
 written as a ready-to-drop folder under:</p>
 <p><code>source\\data\\lua_mod_output\\</code></p>
-<p>For example, if you deploy Cargo Scaling + EXP Multiplier, you'll
-see:</p>
-<p><code>source\\data\\lua_mod_output\\CryovacCargoScaling\\<br>
-source\\data\\lua_mod_output\\CryovacExpMultiplier\\</code></p>
+<p>A <code>mods.txt</code> file is also written next to the folders,
+pre-populated with every deployed mod set to <code>: 1</code> plus
+the standard UE4SS built-in entries. You can use it as-is for a
+clean UE4SS install, or copy the <code>Cryovac...</code> lines into
+your existing <code>mods.txt</code>.</p>
 <p>To install:</p>
 <ol>
-  <li>Copy each generated folder into
-      <code>&lt;Motor Town install&gt;\\MotorTown\\Binaries\\Win64\\ue4ss\\Mods\\</code>.</li>
-  <li>Open <code>ue4ss\\Mods\\mods.txt</code> (create it if missing)
-      and add a line per mod, e.g.:
+  <li>Copy each generated folder from <code>lua_mod_output\\</code>
+      into <code>&lt;Motor Town install&gt;\\MotorTown\\Binaries\\Win64\\ue4ss\\Mods\\</code>.</li>
+  <li>Either copy the generated <code>mods.txt</code> into
+      <code>ue4ss\\Mods\\</code> (overwriting if you had one), or
+      open your existing <code>mods.txt</code> and paste just the
+      <code>Cryovac...</code> lines in, e.g.:
       <pre style="background:{_CARD}; border:1px solid {_BORDER};
            border-radius:4px; padding:6px 10px; color:{_TEXT};">
 CryovacCargoScaling : 1
 CryovacExpMultiplier : 1</pre>
-      Put these BEFORE the <code>; Built-in keybinds</code> line if it's
-      there. <code>: 1</code> enables the mod, <code>: 0</code> disables.</li>
+      Put these BEFORE the <code>; Built-in keybinds</code> line.
+      <code>: 1</code> enables, <code>: 0</code> disables.</li>
   <li>Launch Motor Town. UE4SS opens a console window on startup;
       watch it for <code>[CryovacXxx] === Loaded ===</code> banners
       to confirm each mod started. The full log is at
@@ -1038,8 +1042,14 @@ class LuaScriptsPanel(QtWidgets.QWidget):
             results[mod_name] = r
             self._apply_result_to_card(card, r)
 
+        # Also write a mods.txt listing every mod that deployed
+        # successfully — users can drop it straight into ue4ss/Mods/
+        # alongside the mod folders for a working UE4SS config.
+        successful = [n for n, r in results.items() if r.get('success')]
+        mods_txt_result = write_mods_txt(successful, DEFAULT_OUTPUT_DIR)
+
         # Summary
-        ok = [n for n, r in results.items() if r.get('success')]
+        ok = successful
         bad = [n for n, r in results.items() if not r.get('success')]
         summary_parts = []
         if ok:
@@ -1051,6 +1061,18 @@ class LuaScriptsPanel(QtWidgets.QWidget):
             summary_parts.append(
                 f"<span style='color: {_DANGER};'>\u2717 {len(bad)} failed: "
                 f"{', '.join(bad)}</span>"
+            )
+        if mods_txt_result.get('success'):
+            summary_parts.append(
+                f"<span style='color: {_MUTED};'>wrote mods.txt "
+                f"({mods_txt_result['mod_count']} entr"
+                f"{'y' if mods_txt_result['mod_count'] == 1 else 'ies'})"
+                f"</span>"
+            )
+        else:
+            summary_parts.append(
+                f"<span style='color: {_DANGER};'>mods.txt write failed: "
+                f"{mods_txt_result.get('error', '?')}</span>"
             )
         summary_parts.append(
             f"<a href='open-output' style='color: {_ACCENT};'>"

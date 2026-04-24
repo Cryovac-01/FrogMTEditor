@@ -98,6 +98,71 @@ def render_install_readme(mod_name: str, body: str) -> str:
     )
 
 
+# Standard UE4SS built-in mods shipped with every RE-UE4SS install,
+# with their out-of-the-box enable/disable defaults. We include these
+# in any mods.txt we generate so the file is drop-in usable for a
+# fresh UE4SS installation; users with existing mods.txt files can
+# also just copy the "Cryovac" section out of ours.
+_UE4SS_BUILTIN_MOD_LINES = [
+    'CheatManagerEnablerMod : 1',
+    'ActorDumperMod : 0',
+    'ConsoleCommandsMod : 1',
+    'ConsoleEnablerMod : 1',
+    'SplitScreenMod : 0',
+    'LineTraceMod : 0',
+    'BPModLoaderMod : 1',
+    'BPML_GenericFunctions : 1',
+    'jsbLuaProfilerMod : 0',
+]
+
+# Every mods.txt must end with the Keybinds entry AFTER the
+# "do not move up" comment — UE4SS wants this exact tail.
+_UE4SS_KEYBINDS_TAIL = [
+    '',
+    '; Built-in keybinds, do not move up!',
+    'Keybinds : 1',
+    '',
+]
+
+
+def generate_mods_txt(enabled_mod_names: list) -> str:
+    """Render a complete UE4SS mods.txt containing the built-in mod
+    lines, each deployed Cryovac mod as `Name : 1`, and the required
+    Keybinds tail. Safe to drop straight into ue4ss/Mods/ for a clean
+    install, or users can copy the Cryovac lines into their own file."""
+    lines: list = []
+    lines.append('; UE4SS built-in mods')
+    lines.extend(_UE4SS_BUILTIN_MOD_LINES)
+    if enabled_mod_names:
+        lines.append('')
+        lines.append('; Cryovac mods deployed by Frog Mod Editor')
+        lines.append(
+            '; (each line format: "ModName : 1" to enable, ": 0" to disable)'
+        )
+        for name in enabled_mod_names:
+            lines.append(f'{name} : 1')
+    lines.extend(_UE4SS_KEYBINDS_TAIL)
+    return '\n'.join(lines)
+
+
+def write_mods_txt(enabled_mod_names: list, output_dir: str) -> Dict[str, Any]:
+    """Write the generated mods.txt to <output_dir>/mods.txt, overwriting
+    any previous copy in place (os.O_TRUNC — see write_mod_folder)."""
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+        contents = generate_mods_txt(enabled_mod_names)
+        path = os.path.join(output_dir, 'mods.txt')
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+        try:
+            os.write(fd, contents.encode('utf-8'))
+        finally:
+            os.close(fd)
+        return {'success': True, 'path': path, 'mod_count': len(enabled_mod_names)}
+    except Exception as e:
+        logger.warning("mods.txt write failed: %s", e)
+        return {'success': False, 'error': str(e)}
+
+
 def write_mod_folder(
     mod_name: str,
     output_dir: str,
