@@ -9,6 +9,7 @@ from .economy_panel import EconomyEditorPanel
 from .bus_route_panel import BusRouteConfigPanel
 from .transmission_panel import TransmissionEditorPanel
 from .policy_panel import PolicyEditorPanel
+from .lua_scripts_panel import LuaScriptsPanel
 
 class NativeQtEditorWindow(QtWidgets.QMainWindow):
     def __init__(self, service: NativeEditorService, smoke_test: bool = False) -> None:
@@ -265,10 +266,14 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         self.policy_editor_button = QtWidgets.QPushButton("Policies")
         self.policy_editor_button.setObjectName("policyEditorButton")
         configure_launcher_button(self.policy_editor_button, "secondary", self.icons["parts"])
+        self.lua_scripts_button = QtWidgets.QPushButton("Lua Mods")
+        self.lua_scripts_button.setObjectName("luaScriptsButton")
+        configure_launcher_button(self.lua_scripts_button, "secondary", self.icons["parts"])
         create_buttons.addWidget(self.economy_editor_button, 2, 0)
         create_buttons.addWidget(self.bus_route_button, 3, 0)
         create_buttons.addWidget(self.transmission_editor_button, 4, 0)
         create_buttons.addWidget(self.policy_editor_button, 5, 0)
+        create_buttons.addWidget(self.lua_scripts_button, 6, 0)
         sidebar_layout.addWidget(create_buttons_widget)
 
         tree_frame = QtWidgets.QFrame()
@@ -706,6 +711,15 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         policy_layout.addWidget(self.policy_panel)
         self.stack.addWidget(policy_page)
 
+        # ── LUA Scripts page (stack index 7) ───────────────────────
+        lua_scripts_page = QtWidgets.QWidget()
+        lua_scripts_layout = QtWidgets.QVBoxLayout(lua_scripts_page)
+        lua_scripts_layout.setContentsMargins(0, 0, 0, 0)
+        lua_scripts_layout.setSpacing(0)
+        self.lua_scripts_panel = LuaScriptsPanel()
+        lua_scripts_layout.addWidget(self.lua_scripts_panel)
+        self.stack.addWidget(lua_scripts_page)
+
         self.stack.setCurrentIndex(0)
 
         self.activity_rail = QtWidgets.QFrame()
@@ -737,6 +751,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         self.bus_route_button.clicked.connect(self.open_bus_route_planner)
         self.transmission_editor_button.clicked.connect(self.open_transmission_editor)
         self.policy_editor_button.clicked.connect(self.open_policy_editor)
+        self.lua_scripts_button.clicked.connect(self.open_lua_scripts_editor)
         self.parts_tree.clicked.connect(self._on_tree_clicked)
         self.parts_tree.activated.connect(self._on_tree_clicked)
         self.save_button.clicked.connect(self.save_current)
@@ -1091,6 +1106,9 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         elif mode == "policies":
             self.stack.setCurrentIndex(6)
             self.sidebar_stack.setCurrentWidget(self.parts_sidebar)
+        elif mode == "lua-scripts":
+            self.stack.setCurrentIndex(7)
+            self.sidebar_stack.setCurrentWidget(self.parts_sidebar)
         else:
             self.stack.setCurrentIndex(2)
             self.sidebar_stack.setCurrentWidget(self.creator_sidebar)
@@ -1120,6 +1138,9 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         elif self.workspace_mode == "policies":
             title = "Policy Editor"
             meta = "Edit town policy costs and effect values, or add new policies."
+        elif self.workspace_mode == "lua-scripts":
+            title = "LUA Scripts"
+            meta = "Configure and deploy runtime Lua mods (UE4SS). Check the mods you want, tune each card, then Deploy."
         elif self.current_document:
             title = self.current_document.display_name or self.current_document.name or "Selected document"
             type_label = "Engine" if self.current_document.is_engine else "Tire" if self.current_document.is_tire else "Part"
@@ -1922,6 +1943,13 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
             return
         self._set_workspace_mode("transmission")
         self._record_activity("Opened Transmission Editor.")
+
+    def open_lua_scripts_editor(self) -> None:
+        """Switch to the LUA Scripts panel."""
+        if self._creator_mode_active() and not self._confirm_leave_creator_mode():
+            return
+        self._set_workspace_mode("lua-scripts")
+        self._record_activity("Opened LUA Scripts panel.")
 
     def _on_transmission_created(self, result: dict) -> None:
         """Handle transmission created signal."""
