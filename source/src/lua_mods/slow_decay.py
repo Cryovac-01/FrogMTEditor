@@ -88,11 +88,26 @@ local function SafeGet(obj, prop)
     return nil
 end
 
-local lastRates = {{}}
-
-local function MakeKey(zoneName, field)
-    return tostring(zoneName) .. "." .. field
+-- Stable per-zone string key. FName wrappers don't always stringify
+-- usefully via tostring() in UE4SS - it can return the same userdata
+-- address for different zones, which collapses lastRates into one
+-- bucket and causes cross-zone bleed. We use :ToString() (UE4SS's
+-- FName accessor) with a zone-index fallback.
+local function ZoneStableKey(zone, index)
+    local zoneName = SafeGet(zone, "ZoneKey")
+    if zoneName then
+        local ok, s = pcall(function() return zoneName:ToString() end)
+        if ok and type(s) == "string" and s ~= "" and s ~= "None" then
+            return s
+        end
+    end
+    return "<idx:" .. tostring(index) .. ">"
 end
+
+-- Keyed by "zoneKey.fieldName". Value is the last rate WE observed
+-- in that zone/field combo. Only written after a successful read,
+-- never from a cross-zone source.
+local lastRates = {{}}
 
 local function ApplyDecayCompensation()
     local gameStates = FindAllOf("MotorTownGameState")
@@ -105,36 +120,66 @@ local function ApplyDecayCompensation()
         local zoneStates = SafeGet(hotState, "ZoneStates")
         if not zoneStates then goto nextGS end
 
-        for i = 1, #zoneStates do
+        local zoneCount = 0
+        pcall(function() zoneCount = #zoneStates end)
+        if zoneCount == 0 then goto nextGS end
+
+        -- Pre-compute every zone's stable key. If any two zones hash
+        -- to the same key we CANNOT safely key lastRates by zone, so
+        -- abort the whole cycle. Previous behaviour was to silently
+        -- cross-pollinate, which produced "all towns go up" bleed.
+        local zoneKeys = {{}}
+        local seen = {{}}
+        local collision = false
+        for i = 1, zoneCount do
+            local k = ZoneStableKey(zoneStates[i], i)
+            if seen[k] then
+                Log(string.format(
+                    "abort cycle: duplicate zone key '%s' at indices %d and %d "
+                 .. "(UE4SS FName stringify collision) - rates left untouched this tick",
+                    k, seen[k], i))
+                collision = true
+                break
+            end
+            seen[k] = i
+            zoneKeys[i] = k
+        end
+        if collision then goto nextGS end
+
+        for i = 1, zoneCount do
             local zone = zoneStates[i]
-            local zoneName = SafeGet(zone, "ZoneKey")
-            if not zoneName then goto nextZone end
+            local zoneKey = zoneKeys[i]
 
             for _, field in ipairs(RATE_FIELDS) do
                 local current = SafeGet(zone, field)
-                if not current then goto nextField end
+                if type(current) ~= "number" then goto nextField end
 
-                local key = MakeKey(zoneName, field)
-                local prev = lastRates[key]
+                local mapKey = zoneKey .. "." .. field
+                local prev = lastRates[mapKey]
 
                 if prev and current < prev then
                     local drop = prev - current
                     local compensation = drop * CONFIG.DecayReduction
                     local newRate = current + compensation
+                    -- HARD CAP: never write above the previous observation.
+                    -- Compensation slows a drop; it must never raise a rate
+                    -- past where it already was.
+                    if newRate > prev then newRate = prev end
                     if newRate > 1.0 then newRate = 1.0 end
                     if newRate < 0.0 then newRate = 0.0 end
                     zone[field] = newRate
-                    Log(string.format("%s.%s: %.4f -> %.4f (decay %.4f, compensated +%.4f)",
-                        tostring(zoneName), field, prev, newRate, drop, compensation))
-                    lastRates[key] = newRate
+                    Log(string.format(
+                        "%s.%s: %.4f -> %.4f (decay %.4f, compensated +%.4f)",
+                        zoneKey, field, prev, newRate, drop, compensation))
+                    lastRates[mapKey] = newRate
                 else
-                    lastRates[key] = current
+                    -- Rise (player activity) or first observation: just
+                    -- record the live value, no write-back.
+                    lastRates[mapKey] = current
                 end
 
                 ::nextField::
             end
-
-            ::nextZone::
         end
 
         ::nextGS::
