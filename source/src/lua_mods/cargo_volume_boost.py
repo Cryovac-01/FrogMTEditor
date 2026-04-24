@@ -44,7 +44,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     'dump_multiplier':     1.0,
     'dry_bulk_multiplier': 1.0,
     'garbage_multiplier':  1.0,
-    'cap_weight_at_vanilla': True,
+    'cap_weight_at_vanilla': False,
 }
 
 
@@ -54,7 +54,7 @@ def _slider(key: str, label: str, tooltip: str) -> Setting:
         label=label,
         kind='slider',
         default=1.0,
-        min_value=0.5,
+        min_value=1.0,
         max_value=5.0,
         step=0.1,
         suffix='\u00d7',
@@ -75,7 +75,7 @@ SETTINGS = [
         key='cap_weight_at_vanilla',
         label='Ignore increased weight',
         kind='bool',
-        default=True,
+        default=False,
         tooltip='Keep each vehicle\'s cargo weight at the vanilla-volume '
                 'equivalent, even when you fill it past vanilla capacity. '
                 'Strongly recommended when using multipliers above 1.5\u00d7 '
