@@ -37,12 +37,12 @@ def _float_setting(key: str, label: str, default: float, tooltip: str) -> Settin
     return Setting(
         key=key,
         label=label,
-        kind='float',
+        kind='slider',
         default=default,
         min_value=0.5,
         max_value=5.0,
         step=0.1,
-        suffix=' \u00d7',
+        suffix='\u00d7',
         tooltip=tooltip,
     )
 

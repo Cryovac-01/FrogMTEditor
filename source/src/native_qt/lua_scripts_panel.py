@@ -230,6 +230,90 @@ def _build_bool_control(setting: Setting) -> _SettingControl:
     )
 
 
+def _build_slider_control(setting: Setting) -> _SettingControl:
+    """Horizontal QSlider + live float readout. Step defaults to 0.1 if
+    unset. Slider internally uses integer ticks = value / step."""
+    step = float(setting.step) if setting.step else 0.1
+    lo = float(setting.min_value) if setting.min_value is not None else 0.0
+    hi = float(setting.max_value) if setting.max_value is not None else 1.0
+    default = float(setting.default)
+
+    def f2i(f: float) -> int:
+        return int(round(f / step))
+
+    def i2f(i: int) -> float:
+        return round(i * step, 4)
+
+    container = QtWidgets.QWidget()
+    row = QtWidgets.QHBoxLayout(container)
+    row.setContentsMargins(0, 0, 0, 0)
+    row.setSpacing(10)
+
+    slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+    slider.setRange(f2i(lo), f2i(hi))
+    slider.setSingleStep(1)
+    slider.setPageStep(max(1, f2i((hi - lo) / 10.0)))
+    slider.setValue(f2i(default))
+    slider.setMinimumWidth(220)
+    slider.setStyleSheet(f"""
+        QSlider::groove:horizontal {{
+            background: {_CARD};
+            border: 1px solid {_BORDER};
+            border-radius: 3px;
+            height: 6px;
+        }}
+        QSlider::sub-page:horizontal {{
+            background: {_ACCENT};
+            border-radius: 3px;
+            height: 6px;
+        }}
+        QSlider::handle:horizontal {{
+            background: {_ACCENT};
+            border: 1px solid {_ACCENT};
+            width: 16px;
+            height: 16px;
+            margin: -6px 0;
+            border-radius: 8px;
+        }}
+        QSlider::handle:horizontal:hover {{
+            background: #7cd0e6;
+        }}
+    """)
+    if setting.tooltip:
+        slider.setToolTip(setting.tooltip)
+
+    readout = QtWidgets.QLabel()
+    readout.setMinimumWidth(60)
+    readout.setAlignment(
+        QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+    )
+    readout.setStyleSheet(
+        f"color: {_TEXT}; font-size: 12px; font-weight: 600;"
+    )
+
+    def format_val(f: float) -> str:
+        text = f"{f:.2f}".rstrip('0').rstrip('.')
+        if '.' not in text:
+            text += '.0'
+        return text + (setting.suffix or '')
+
+    def on_change(_i: int = 0) -> None:
+        readout.setText(format_val(i2f(slider.value())))
+
+    slider.valueChanged.connect(on_change)
+    on_change()
+
+    row.addWidget(slider, 1)
+    row.addWidget(readout)
+
+    return _SettingControl(
+        setting=setting, widget=container,
+        getter=lambda: i2f(slider.value()),
+        setter=lambda v: slider.setValue(f2i(float(v))),
+        signal=slider.valueChanged,
+    )
+
+
 def _build_control(setting: Setting) -> _SettingControl:
     if setting.kind == 'mode':
         return _build_mode_control(setting)
@@ -237,6 +321,8 @@ def _build_control(setting: Setting) -> _SettingControl:
         return _build_int_control(setting)
     if setting.kind == 'float':
         return _build_float_control(setting)
+    if setting.kind == 'slider':
+        return _build_slider_control(setting)
     if setting.kind == 'bool':
         return _build_bool_control(setting)
     raise ValueError(f"Unknown setting kind: {setting.kind}")
