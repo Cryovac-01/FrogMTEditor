@@ -117,6 +117,7 @@ def _ensure_loaded() -> None:
     # Import each deployer module so its register() call fires.
     # Order here is the display order in the UI panel.
     from . import cargo_scaling                 # noqa: F401
+    from . import cargo_volume_boost            # noqa: F401
     from . import company_vehicle_care          # noqa: F401
     from . import company_vehicle_limits        # noqa: F401
     from . import exp_multiplier                # noqa: F401
