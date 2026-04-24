@@ -258,7 +258,16 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         ))
         scroll_layout.addWidget(scaling_card)
 
-        # -- Company Drivers Card ------------------------------------------
+        # -- Company Drivers Card (profit-share preset removed) ----------
+        # The old AI-Driver-Profit-Share preset scaled the INI's
+        # VehicleOwnerProfitShare field, but that value applies to every
+        # vehicle of a class globally — including AI-company and rental
+        # vehicles the player does not own. A player boosting it to 20%
+        # also saw 20% "owner cut" taken by non-company vehicles they
+        # temporarily drove, which is unfixable via INI alone. The card
+        # is retained as a stub so the section still exists in the panel
+        # layout, with a note explaining where to go for per-company
+        # profit share if we ever build it (runtime Lua hook).
         company_card = QtWidgets.QFrame()
         company_card.setStyleSheet(f"""
             QFrame {{
@@ -269,58 +278,20 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         """)
         company_layout = QtWidgets.QVBoxLayout(company_card)
         company_layout.setContentsMargins(20, 16, 20, 16)
-        company_layout.setSpacing(10)
+        company_layout.setSpacing(8)
         company_layout.addWidget(_label("COMPANY DRIVERS", "eyebrow"))
-
-        # --- Profit Share ---
-        company_layout.addWidget(_label("AI Driver Profit Share", "section"))
+        company_layout.addWidget(_label("AI Driver Profit Share removed", "section"))
         company_layout.addWidget(_label(
-            "Percentage of route earnings you receive from hired company drivers. "
-            "Vanilla is ~5%. Higher values make company routes more profitable.",
+            "The profit-share preset was scaling "
+            "<code>VehicleOwnerProfitShare</code> in the balance INI, but "
+            "that field is global per vehicle class \u2014 it changed the "
+            "profit share on every matching vehicle in the world, including "
+            "AI-company and rental vehicles you don\u2019t own. A proper "
+            "\u201conly my company\u201d profit share requires a runtime "
+            "Lua hook; ask if you want one built. For now, the generated "
+            "mod INI keeps vanilla profit-share values (\u2248 5% in-game).",
             "muted",
         ))
-
-        _PROFIT_BTN_STYLE = f"""
-            QPushButton {{
-                background: {_CARD};
-                color: {_TEXT};
-                border: 1px solid {_BORDER};
-                border-radius: 4px;
-                padding: 6px 14px;
-                font-size: 12px;
-                font-weight: 600;
-            }}
-            QPushButton:hover {{
-                background: {_BORDER};
-            }}
-            QPushButton:checked {{
-                background: {_ACCENT};
-                color: #0b1410;
-                border-color: {_ACCENT};
-            }}
-        """
-        profit_row = QtWidgets.QHBoxLayout()
-        profit_row.setSpacing(8)
-        self._profit_buttons = {}
-        self._profit_group = QtWidgets.QButtonGroup(self)
-        self._profit_group.setExclusive(True)
-        for preset_label in eco.PROFIT_SHARE_LABELS:
-            btn = QtWidgets.QPushButton(preset_label.replace(' (Vanilla)', ''))
-            btn.setCheckable(True)
-            btn.setStyleSheet(_PROFIT_BTN_STYLE)
-            btn.setProperty('preset_label', preset_label)
-            self._profit_buttons[preset_label] = btn
-            self._profit_group.addButton(btn)
-            profit_row.addWidget(btn)
-        self._profit_buttons['5% (Vanilla)'].setChecked(True)
-        profit_row.addStretch(1)
-        company_layout.addLayout(profit_row)
-
-        self._profit_group.buttonClicked.connect(lambda *_: self._on_preview())
-
-        self.profit_preview = _label("", "accent")
-        company_layout.addWidget(self.profit_preview)
-
         scroll_layout.addWidget(company_card)
 
         # -- Multiplier cards (all use sliders + custom checkbox) -----------
@@ -603,21 +574,6 @@ class EconomyEditorPanel(QtWidgets.QWidget):
 
         return card
 
-    def _get_profit_share_label(self) -> str:
-        """Return the preset label for the currently selected profit share."""
-        for btn in self._profit_group.buttons():
-            if btn.isChecked():
-                return btn.property('preset_label') or '5% (Vanilla)'
-        return '5% (Vanilla)'
-
-    def _set_profit_share_label(self, label: str) -> None:
-        """Select a profit share preset button."""
-        btn = self._profit_buttons.get(label)
-        if btn:
-            btn.setChecked(True)
-        else:
-            self._profit_buttons['5% (Vanilla)'].setChecked(True)
-
     def _get_slider_value(self, key: str) -> float:
         """Read the current float multiplier from a slider card."""
         slider = getattr(self, f'{key}_slider', None)
@@ -677,8 +633,9 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         # now (see lua_mods/cargo_scaling.py). Legacy values here are
         # ignored on load.
 
-        # Load profit share
-        self._set_profit_share_label(settings.get('profit_share', '5% (Vanilla)'))
+        # profit_share was removed from the panel — the preset was
+        # global per vehicle class, affecting non-owned vehicles too.
+        # Legacy values saved here are ignored on load.
 
         # Load any saved custom overrides
         self._custom_cargo_values = dict(settings.get('custom_cargo_overrides', {}))
@@ -764,17 +721,6 @@ class EconomyEditorPanel(QtWidgets.QWidget):
                 preview.setText(f"{preview_labels[key]} \u00d7 {mults[key]:.1f}")
             else:
                 preview.setText("No change (vanilla values)")
-
-        # Profit share preview
-        profit_label = self._get_profit_share_label()
-        profit_mult = eco.PROFIT_SHARE_PRESETS.get(profit_label, 1.0)
-        if abs(profit_mult - 1.0) < 0.001:
-            self.profit_preview.setText("")
-        else:
-            self.profit_preview.setText(
-                f"Profit share \u00d7{profit_mult:.1f} from vanilla "
-                f"({profit_label.replace(' (Vanilla)', '')})"
-            )
 
         any_ini_custom = any(customs[k] for k in customs)
         self.cargo_custom_hint.setVisible(customs['economy'])
@@ -922,7 +868,6 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         for key in ('economy', 'bus', 'taxi', 'ambulance', 'fuel', 'vehicle'):
             settings[f'{key}_multiplier'] = self._get_slider_value(key)
             settings[f'{key}_custom'] = getattr(self, f'{key}_custom').isChecked()
-        settings['profit_share'] = self._get_profit_share_label()
         settings['custom_cargo_overrides'] = self._custom_cargo_values
         settings['custom_ini_overrides'] = self._custom_ini_values
 
@@ -1000,14 +945,12 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         for key in ('economy', 'bus', 'taxi', 'ambulance', 'fuel', 'vehicle'):
             self._set_slider_value(key, 1.0)
             getattr(self, f'{key}_custom').setChecked(False)
-        self._set_profit_share_label('5% (Vanilla)')
 
         self._custom_cargo_values = {}
         self._custom_ini_values = {}
 
         eco.remove_economy_mod_files()
         reset_settings = {
-            'profit_share': '5% (Vanilla)',
             'custom_cargo_overrides': {},
             'custom_ini_overrides': {},
         }

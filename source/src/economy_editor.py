@@ -822,17 +822,12 @@ def apply_all_economy_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         results['balance_ini'] = f'error: {e}'
 
-    # 4. Apply profit share multiplier
-    profit_label = settings.get('profit_share', '5% (Vanilla)')
-    profit_mult = PROFIT_SHARE_PRESETS.get(profit_label, 1.0)
-    try:
-        if abs(profit_mult - 1.0) > 0.001:
-            result = apply_profit_share_multiplier(profit_mult)
-            results['profit_share'] = result
-        else:
-            results['profit_share'] = 'ok (vanilla)'
-    except Exception as e:
-        results['profit_share'] = f'error: {e}'
+    # 4. Profit share preset was removed — VehicleOwnerProfitShare in
+    # the balance INI applies globally per vehicle class and so
+    # affected every matching vehicle in the world, including ones
+    # the player doesn't own (rentals, AI-company trucks). Any
+    # legacy profit_share value in `settings` is ignored.
+    results['profit_share'] = 'skipped (feature removed)'
 
     # 5. Save settings for next session
     save_economy_settings(settings)
