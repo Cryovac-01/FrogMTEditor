@@ -411,10 +411,33 @@ def _build_float_control(setting: Setting) -> _SettingControl:
 
 
 def _build_bool_control(setting: Setting) -> _SettingControl:
-    cb = QtWidgets.QCheckBox(setting.label)
+    # The left-column label in the form layout already names this
+    # setting — don't repeat it inside the QCheckBox. Using an empty
+    # label keeps the indicator on its own, aligned with sliders/
+    # spinboxes in the right column.
+    cb = QtWidgets.QCheckBox()
     cb.setChecked(bool(setting.default))
     if setting.tooltip:
         cb.setToolTip(setting.tooltip)
+    # Custom indicator styling for the dark theme — Fusion's native
+    # indicator blends into the background. Accent fill = checked,
+    # dark card background + subtle border = unchecked.
+    cb.setStyleSheet(f"""
+        QCheckBox::indicator {{
+            width: 18px;
+            height: 18px;
+            border: 1px solid {_BORDER};
+            border-radius: 3px;
+            background: {_CARD};
+        }}
+        QCheckBox::indicator:hover {{
+            border-color: {_ACCENT};
+        }}
+        QCheckBox::indicator:checked {{
+            background: {_ACCENT};
+            border-color: {_ACCENT};
+        }}
+    """)
     return _SettingControl(
         setting=setting, widget=cb,
         getter=lambda: cb.isChecked(),
