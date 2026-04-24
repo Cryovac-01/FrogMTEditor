@@ -363,9 +363,49 @@ class _ModCard(QtWidgets.QFrame):
         hl.setContentsMargins(14, 10, 14, 10)
         hl.setSpacing(10)
 
-        self._enable_cb = QtWidgets.QCheckBox()
+        # Use a plain QPushButton as the enable toggle. Works the same
+        # as a QCheckBox (checkable two-state) but renders as a pill
+        # that reads "Enabled"/"Disabled" with an accent fill when on
+        # — far more visible against the dark card background than a
+        # native QCheckBox indicator, which on Fusion style is a small
+        # square that blends into the theme.
+        self._enable_cb = QtWidgets.QPushButton()
+        self._enable_cb.setCheckable(True)
         self._enable_cb.setChecked(initial_enabled)
-        self._enable_cb.setToolTip("Include this mod when Deploy is clicked.")
+        self._enable_cb.setToolTip(
+            "Tick to include this mod when you click the global "
+            "'Deploy enabled Lua mods' button."
+        )
+        self._enable_cb.setMinimumWidth(92)
+        self._enable_cb.setFixedHeight(28)
+        self._enable_cb.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self._enable_cb.setStyleSheet(f"""
+            QPushButton {{
+                background: {_CARD};
+                color: {_MUTED};
+                border: 1px solid {_BORDER};
+                border-radius: 14px;
+                padding: 0 14px;
+                font-size: 12px;
+                font-weight: 600;
+                text-align: center;
+            }}
+            QPushButton:hover {{
+                border-color: {_ACCENT};
+            }}
+            QPushButton:checked {{
+                background: {_ACCENT};
+                color: #0b1410;
+                border-color: {_ACCENT};
+            }}
+        """)
+
+        def _update_enable_label() -> None:
+            self._enable_cb.setText(
+                "\u2714 Enabled" if self._enable_cb.isChecked() else "Disabled"
+            )
+        _update_enable_label()
+        self._enable_cb.toggled.connect(lambda _=0: _update_enable_label())
         hl.addWidget(self._enable_cb)
 
         title_label = QtWidgets.QLabel(deployer.UI_TITLE)
