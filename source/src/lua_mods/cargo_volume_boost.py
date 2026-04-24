@@ -40,10 +40,10 @@ UI_DESCRIPTION = (
 )
 
 DEFAULT_CONFIG: Dict[str, Any] = {
-    'tanker_multiplier':   2.0,
-    'dump_multiplier':     2.0,
-    'dry_bulk_multiplier': 2.0,
-    'garbage_multiplier':  2.0,
+    'tanker_multiplier':   1.0,
+    'dump_multiplier':     1.0,
+    'dry_bulk_multiplier': 1.0,
+    'garbage_multiplier':  1.0,
     'cap_weight_at_vanilla': True,
 }
 
@@ -53,7 +53,7 @@ def _slider(key: str, label: str, tooltip: str) -> Setting:
         key=key,
         label=label,
         kind='slider',
-        default=2.0,
+        default=1.0,
         min_value=0.5,
         max_value=5.0,
         step=0.1,
