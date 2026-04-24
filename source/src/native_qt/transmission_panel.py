@@ -148,6 +148,15 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
         self._current_name: str = ""
         self._build_ui()
 
+        # Auto-load bundled vanilla transmissions shipped with this release
+        # (data/vanilla/Transmission/) so the user doesn't have to point at
+        # their unpacked game folder for stock entries.
+        bundled_root = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), "..", "..", "data", "vanilla"
+        ))
+        if os.path.isdir(bundled_root):
+            self.set_unpacked_folder(bundled_root)
+
     # ------------------------------------------------------------------
     # UI Construction
     # ------------------------------------------------------------------
@@ -378,12 +387,35 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
             self.set_unpacked_folder(path)
 
     def set_unpacked_folder(self, path: str) -> None:
-        """Set the unpacked game folder and load transmissions."""
-        trans_dir = os.path.join(path, 'Content', 'Cars', 'Parts', 'Transmission')
-        if not os.path.isdir(trans_dir):
-            # Try if they selected the Content folder directly
-            trans_dir = os.path.join(path, 'Cars', 'Parts', 'Transmission')
-        if not os.path.isdir(trans_dir):
+        """Set the unpacked game folder and load transmissions.
+
+        Tries several candidate layouts so the selected folder can be:
+          - The repo's bundled data/vanilla/ (has Transmission/ directly)
+          - A Transmission/ folder selected directly
+          - The MotorTown-prefixed layout produced by UnrealPak.exe
+            (...\\Unpacked\\MotorTown\\Content\\Cars\\Parts\\Transmission\\)
+          - The "Content" folder selected directly
+          - The folder one above Content
+        """
+        candidates = [
+            os.path.join(path, 'Content', 'Cars', 'Parts', 'Transmission'),
+            os.path.join(path, 'Cars', 'Parts', 'Transmission'),
+            os.path.join(path, 'MotorTown', 'Content', 'Cars', 'Parts', 'Transmission'),
+            os.path.join(path, 'Transmission'),
+            path,  # user pointed directly at a folder with .uexp files
+        ]
+        trans_dir = None
+        for candidate in candidates:
+            if not os.path.isdir(candidate):
+                continue
+            try:
+                if any(f.endswith('.uexp') for f in os.listdir(candidate)):
+                    trans_dir = candidate
+                    break
+            except OSError:
+                continue
+
+        if trans_dir is None:
             self.status_label.setText("No Transmission folder found in selected path.")
             self.status_label.setStyleSheet(f"color: #e74c3c; font-size: 12px;")
             return

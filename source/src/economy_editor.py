@@ -176,6 +176,51 @@ _MOD_BALANCE_INI = os.path.join(_MOD_CONFIG_DIR, 'DefaultMotorTownBalance.ini')
 # Economy settings file (persisted user preferences)
 _ECONOMY_SETTINGS_PATH = os.path.join(_PROJECT_ROOT, 'data', 'economy_settings.json')
 
+# cargos.json — the full Cargos_01 DataTable dumped from the live game by
+# CryovacCargoDumper. Contains every FCargoRow field for all 90 cargo types,
+# including the 25 rows that have no Balance.json PaymentMultipliers entry.
+# Used as the authoritative list of cargo names + per-row context (real base
+# rate PaymentPer1Km, weight-penalty slope, etc.) when building the mod.
+_VANILLA_CARGO_DUMP = os.path.join(_PROJECT_ROOT, 'data', 'vanilla', 'cargos.json')
+
+
+# Cached on first read
+_cargo_dump_cache: Optional[Dict[str, Dict[str, Any]]] = None
+
+
+def load_vanilla_cargo_dump() -> Dict[str, Dict[str, Any]]:
+    """Load cargos.json and return {cargo_name: row_fields_dict}.
+
+    The dump covers all 90 cargo rows in Cargos_01. Each row has the real
+    DataTable values — PaymentPer1Km, PaymentPer1KmMultiplierByMaxWeight,
+    BasePayment, WeightRange min/max, delivery distance limits, and so on.
+
+    Returns an empty dict if cargos.json is missing. When that happens,
+    callers fall back to Balance.json PaymentMultipliers (65 rows).
+    """
+    global _cargo_dump_cache
+    if _cargo_dump_cache is not None:
+        return _cargo_dump_cache
+    if not os.path.isfile(_VANILLA_CARGO_DUMP):
+        logger.warning("cargos.json not found at %s", _VANILLA_CARGO_DUMP)
+        _cargo_dump_cache = {}
+        return _cargo_dump_cache
+    try:
+        with open(_VANILLA_CARGO_DUMP, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        _cargo_dump_cache = {r['name']: r for r in data.get('rows', []) if 'name' in r}
+        logger.info("Loaded %d cargo rows from %s",
+                    len(_cargo_dump_cache), _VANILLA_CARGO_DUMP)
+    except Exception as e:
+        logger.warning("Could not load cargos.json: %s", e)
+        _cargo_dump_cache = {}
+    return _cargo_dump_cache
+
+
+# Default multiplier for cargo rows that have no explicit Balance.json
+# entry. UE4 DataTables treat a missing key as 1.0× (no override).
+_IMPLICIT_PAYMENT_MULTIPLIER = 1.0
+
 # ---------------------------------------------------------------------------
 # Multiplier presets
 # ---------------------------------------------------------------------------
@@ -301,56 +346,46 @@ def load_mod_balance_json() -> Optional[Dict[str, Any]]:
 
 
 def get_cargo_payments(vanilla: bool = True) -> Dict[str, float]:
-    """Get cargo payment multipliers, either vanilla or modded."""
+    """Get cargo payment multipliers from Balance.json Cargo.PaymentMultipliers.
+
+    Returns only the explicit vanilla entries (~65 rows) or the modded
+    equivalent. The per-vehicle capacity penalty lives in the
+    Cargos_01 DataTable and is controlled by the CryovacCargoScaling
+    Lua mod (see src/cargo_scaling_deployer.py), not this file.
+    """
     if not vanilla:
         modded = load_mod_balance_json()
         if modded:
             return modded.get('Cargo', {}).get('PaymentMultipliers', {})
     data = load_vanilla_balance_json()
-    return data.get('Cargo', {}).get('PaymentMultipliers', {})
+    return dict(data.get('Cargo', {}).get('PaymentMultipliers', {}))
 
 
-CAPACITY_SCALING_MODES = ('Vanilla', 'Low', 'High', 'Off')
+def get_cargo_row_info(cargo_name: str) -> Dict[str, Any]:
+    """Return the per-row DataTable info for a cargo (PaymentPer1Km, etc.).
 
-
-def _apply_capacity_mode(base_value: float, mode: str) -> float:
-    """Reshape a single cargo multiplier according to the capacity scaling mode.
-
-    Vanilla: unchanged.
-    Low:  compress the spread toward 1.0 by 50 % (still rewards small cargo, less aggressively).
-    High: exaggerate the spread by 1.5×, clamped to [0.5, 5.0].
-    Off:  everything becomes 1.0 (no per-cargo difference).
+    Returns an empty dict if the cargo isn't in cargos.json.
     """
-    if mode == 'Off':
-        return 1.0
-    if mode == 'Low':
-        return 1.0 + (base_value - 1.0) * 0.5
-    if mode == 'High':
-        return max(0.5, min(5.0, 1.0 + (base_value - 1.0) * 1.5))
-    return base_value  # Vanilla
+    return load_vanilla_cargo_dump().get(cargo_name, {})
 
 
-def apply_cargo_multiplier(
-    multiplier: float,
-    capacity_mode: str = 'Vanilla',
-) -> Dict[str, Any]:
-    """Apply a global multiplier to all cargo payment values and save.
+def apply_cargo_multiplier(multiplier: float) -> Dict[str, Any]:
+    """Apply a global multiplier to every Balance.json cargo payment and save.
 
-    Args:
-        multiplier: Global multiplier applied to every cargo value.
-        capacity_mode: One of 'Vanilla', 'Low', 'High', 'Off'.
-                       Reshapes the per-cargo-type spread before
-                       the global multiplier is applied.
+    Simple scalar: modded_value = vanilla_value × multiplier. Covers the
+    ~65 cargo rows that have explicit PaymentMultipliers entries. The
+    per-vehicle capacity penalty (pickup-vs-box-truck spread) is a
+    different axis, handled by CryovacCargoScaling Lua mod, not here.
     """
     vanilla = load_vanilla_balance_json()
     modified = copy.deepcopy(vanilla)
 
-    cargo_payments = modified.get('Cargo', {}).get('PaymentMultipliers', {})
+    cargo_section = modified.setdefault('Cargo', {})
+    cargo_payments = cargo_section.setdefault('PaymentMultipliers', {})
     vanilla_payments = vanilla.get('Cargo', {}).get('PaymentMultipliers', {})
 
     for cargo_name, base_value in vanilla_payments.items():
-        shaped = _apply_capacity_mode(base_value, capacity_mode)
-        cargo_payments[cargo_name] = round(shaped * multiplier, 6)
+        cargo_payments[cargo_name] = round(base_value * multiplier, 6)
 
     modified['Cargo']['PaymentMultipliers'] = cargo_payments
     _save_balance_json(modified)
@@ -686,10 +721,10 @@ def apply_all_economy_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     is_custom_fuel = bool(settings.get('fuel_custom', False))
     is_custom_veh = bool(settings.get('vehicle_custom', False))
 
-    # Capacity scaling mode
-    cap_mode = str(settings.get('capacity_scaling_mode', 'Vanilla'))
-    if cap_mode not in CAPACITY_SCALING_MODES:
-        cap_mode = 'Vanilla'
+    # capacity_scaling_mode is stored in settings but drives a separate
+    # deploy path (CryovacCargoScaling Lua mod via cargo_scaling_deployer).
+    # It intentionally does NOT modify Balance.json — that axis and this
+    # axis (per-cargo-type vs per-vehicle-weight) are unrelated.
 
     results = {}
 
@@ -701,9 +736,8 @@ def apply_all_economy_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
                 apply_custom_cargo_values(custom_cargo)
             results['balance_json'] = 'ok (custom)'
         else:
-            apply_cargo_multiplier(eco_mult, capacity_mode=cap_mode)
-            mode_tag = f' ({cap_mode.lower()})' if cap_mode != 'Vanilla' else ''
-            results['balance_json'] = 'ok' + mode_tag
+            apply_cargo_multiplier(eco_mult)
+            results['balance_json'] = 'ok'
     except Exception as e:
         results['balance_json'] = f'error: {e}'
 

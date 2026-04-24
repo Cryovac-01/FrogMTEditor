@@ -10,9 +10,14 @@ Provides:
 """
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+
 from PySide6 import QtCore, QtGui, QtWidgets
 
 import economy_editor as eco
+import cargo_scaling_deployer as cargo_lua
 
 
 # ---------------------------------------------------------------------------
@@ -247,11 +252,16 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         scaling_layout.setContentsMargins(20, 16, 20, 16)
         scaling_layout.setSpacing(8)
         scaling_layout.addWidget(_label("CARGO BALANCE", "eyebrow"))
-        scaling_layout.addWidget(_label("Capacity Scaling", "section"))
+        scaling_layout.addWidget(_label("Vehicle Capacity Penalty (Lua mod)", "section"))
         scaling_layout.addWidget(_label(
-            "Controls how much per-unit cargo payment varies based on vehicle capacity. "
-            "By default, small cargo (boxes) pays up to 3.6\u00d7 while bulk loads (fuel/oil) "
-            "pay as low as 0.64\u00d7, penalising higher-capacity trucks per pallet.",
+            "Reshapes how per-unit cargo payment drops as vehicle capacity grows. "
+            "Small-vehicle pay is identical under every mode \u2014 only the decay slope changes. "
+            "Low: halves the penalty so big trucks catch up (~60% more per unit vs vanilla at the same capacity). "
+            "High: 1.5\u00d7 steeper \u2014 big trucks earn even less. "
+            "Off: no penalty at all \u2014 every vehicle size earns the small-truck rate for the same cargo.\n\n"
+            "This is delivered as a runtime Lua mod (CryovacCargoScaling) that modifies "
+            "FCargoRow.PaymentPer1KmMultiplierByMaxWeight in the live Cargos_01 DataTable at session start. "
+            "Click Deploy below to generate the mod folder \u2014 requires UE4SS installed in Motor Town.",
             "muted",
         ))
 
@@ -281,10 +291,10 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         self._scaling_group = QtWidgets.QButtonGroup(self)
         self._scaling_group.setExclusive(True)
         for mode_key, label_text, tooltip in [
-            ("Vanilla", "Vanilla", "Default game values — no change to per-cargo scaling."),
-            ("Low", "Low", "Compress the spread toward 1.0 by 50%. Still rewards small cargo, but less aggressively."),
-            ("High", "High", "Exaggerate the spread by 1.5\u00d7. Small cargo up to 5\u00d7, bulk cargo down to 0.5\u00d7."),
-            ("Off", "Off", "All cargo pays the same base rate (1.0). No capacity penalty at all."),
+            ("Vanilla", "Vanilla", "No change. Weight penalty scalar = 1.0\u00d7. Default Motor Town behavior."),
+            ("Low", "Low", "Half the weight penalty (scalar 0.5\u00d7). Small trucks unchanged; big trucks earn ~60% more per unit than vanilla at the same capacity."),
+            ("High", "High", "1.5\u00d7 weight penalty. Small trucks unchanged; big trucks earn less than vanilla. Makes overly-sized loadouts more costly."),
+            ("Off", "Off", "No weight penalty at all (scalar 0.0\u00d7). Every vehicle size earns the small-vehicle rate for the same cargo."),
         ]:
             btn = QtWidgets.QPushButton(label_text)
             btn.setCheckable(True)
@@ -301,6 +311,72 @@ class EconomyEditorPanel(QtWidgets.QWidget):
 
         self.scaling_preview = _label("", "accent")
         scaling_layout.addWidget(self.scaling_preview)
+
+        # -- Deploy row inside the card ------------------------------------
+        deploy_row = QtWidgets.QHBoxLayout()
+        deploy_row.setSpacing(10)
+        deploy_row.setContentsMargins(0, 6, 0, 0)
+
+        self.scaling_deploy_btn = QtWidgets.QPushButton("Deploy Lua mod")
+        self.scaling_deploy_btn.setToolTip(
+            "Generate the CryovacCargoScaling folder with the selected mode "
+            "baked in. Requires UE4SS installed in Motor Town \u2014 click for "
+            "full setup instructions."
+        )
+        self.scaling_deploy_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {_ACCENT};
+                color: #0b1410;
+                border: 1px solid {_ACCENT};
+                border-radius: 4px;
+                padding: 7px 18px;
+                font-size: 12px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: #7cd0e6;
+            }}
+            QPushButton:pressed {{
+                background: #4ea8c2;
+            }}
+            QPushButton:disabled {{
+                background: {_BORDER};
+                color: {_MUTED};
+                border-color: {_BORDER};
+            }}
+        """)
+        self.scaling_deploy_btn.clicked.connect(self._on_deploy_scaling_lua)
+        deploy_row.addWidget(self.scaling_deploy_btn)
+
+        self.scaling_help_btn = QtWidgets.QPushButton("Setup instructions")
+        self.scaling_help_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {_ACCENT};
+                border: 1px solid {_BORDER};
+                border-radius: 4px;
+                padding: 7px 14px;
+                font-size: 12px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background: {_BORDER};
+            }}
+        """)
+        self.scaling_help_btn.clicked.connect(self._on_show_scaling_help)
+        deploy_row.addWidget(self.scaling_help_btn)
+
+        deploy_row.addStretch(1)
+        scaling_layout.addLayout(deploy_row)
+
+        self.scaling_deploy_status = _label("", "muted")
+        self.scaling_deploy_status.setTextInteractionFlags(
+            QtCore.Qt.TextInteractionFlag.TextBrowserInteraction
+        )
+        self.scaling_deploy_status.setOpenExternalLinks(False)
+        self.scaling_deploy_status.linkActivated.connect(self._on_scaling_status_link)
+        scaling_layout.addWidget(self.scaling_deploy_status)
+
         scroll_layout.addWidget(scaling_card)
 
         # -- Company Drivers Card ------------------------------------------
@@ -678,6 +754,128 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         else:
             self._scaling_buttons['Vanilla'].setChecked(True)
 
+    # ------------------------------------------------------------------
+    # CryovacCargoScaling Lua-mod deploy
+    # ------------------------------------------------------------------
+    def _on_deploy_scaling_lua(self) -> None:
+        """Generate the CryovacCargoScaling Lua mod folder for the current mode."""
+        mode = self._get_capacity_scaling_mode()
+        result = cargo_lua.deploy(mode)
+        if result.get('success'):
+            path = result['path']
+            self._last_scaling_deploy_path = path
+            # Keep the inline status short — the big dialog carries the
+            # long-form instructions.
+            self.scaling_deploy_status.setText(
+                f"<span style='color: {_SUCCESS};'>"
+                f"\u2713 Deployed {mode} mode to </span>"
+                f"<a href='open-folder' style='color: {_ACCENT};'>"
+                f"{path.replace(chr(92), '/')}</a>"
+                f"<br><span style='color: {_MUTED};'>"
+                f"Click the path above to open the output folder. "
+                f"See \"Setup instructions\" for how to install."
+                f"</span>"
+            )
+            self._show_scaling_deploy_dialog(mode, path)
+        else:
+            err = result.get('error', 'unknown error')
+            self.scaling_deploy_status.setText(
+                f"<span style='color: #f07070;'>\u2717 Deploy failed: {err}</span>"
+            )
+
+    def _on_show_scaling_help(self) -> None:
+        """Open the full setup-instructions dialog without deploying."""
+        mode = self._get_capacity_scaling_mode()
+        self._show_scaling_deploy_dialog(mode, path=None)
+
+    def _show_scaling_deploy_dialog(self, mode: str, path) -> None:
+        """Modal dialog with full UE4SS + install instructions."""
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle(
+            f"CryovacCargoScaling \u2014 {'Deployed' if path else 'Setup instructions'}"
+        )
+        dlg.setMinimumSize(640, 520)
+
+        layout = QtWidgets.QVBoxLayout(dlg)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(10)
+
+        header = _label(
+            f"Mode: {mode}  \u2014  weight-penalty scalar "
+            f"\u00d7{cargo_lua.MODE_WEIGHT_FACTOR[mode]}",
+            "title",
+        )
+        layout.addWidget(header)
+
+        if path:
+            loc = _label(
+                f"<span style='color: {_SUCCESS};'>Output folder:</span> "
+                f"<code>{path}</code>",
+                "muted",
+            )
+            loc.setTextInteractionFlags(
+                QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+            layout.addWidget(loc)
+
+        text = QtWidgets.QPlainTextEdit()
+        text.setReadOnly(True)
+        text.setPlainText(cargo_lua.get_install_instructions(mode))
+        text.setStyleSheet(f"""
+            QPlainTextEdit {{
+                background: {_CARD};
+                color: {_TEXT};
+                border: 1px solid {_BORDER};
+                border-radius: 4px;
+                font-family: Consolas, 'Courier New', monospace;
+                font-size: 12px;
+            }}
+        """)
+        layout.addWidget(text, 1)
+
+        btn_row = QtWidgets.QHBoxLayout()
+        if path:
+            open_btn = QtWidgets.QPushButton("Open output folder")
+            open_btn.clicked.connect(lambda: self._open_in_file_manager(path))
+            btn_row.addWidget(open_btn)
+
+        ue4ss_btn = QtWidgets.QPushButton("Open UE4SS releases page")
+        ue4ss_btn.clicked.connect(lambda: QtGui.QDesktopServices.openUrl(
+            QtCore.QUrl("https://github.com/UE4SS-RE/RE-UE4SS/releases")
+        ))
+        btn_row.addWidget(ue4ss_btn)
+
+        btn_row.addStretch(1)
+
+        close_btn = QtWidgets.QPushButton("Close")
+        close_btn.clicked.connect(dlg.accept)
+        close_btn.setDefault(True)
+        btn_row.addWidget(close_btn)
+
+        layout.addLayout(btn_row)
+        dlg.exec()
+
+    def _on_scaling_status_link(self, href: str) -> None:
+        """Handle the 'open-folder' link inside the deploy status label."""
+        if href == 'open-folder' and getattr(self, '_last_scaling_deploy_path', None):
+            self._open_in_file_manager(self._last_scaling_deploy_path)
+
+    @staticmethod
+    def _open_in_file_manager(path: str) -> None:
+        """Best-effort cross-platform 'show folder in Explorer/Finder/xdg-open'."""
+        try:
+            if not os.path.isdir(path):
+                return
+            if sys.platform == 'win32':
+                os.startfile(path)  # type: ignore[attr-defined]
+            elif sys.platform == 'darwin':
+                subprocess.Popen(['open', path])
+            else:
+                subprocess.Popen(['xdg-open', path])
+        except Exception:
+            # Opening is a convenience, not critical. Silent fail.
+            pass
+
     def _get_slider_value(self, key: str) -> float:
         """Read the current float multiplier from a slider card."""
         slider = getattr(self, f'{key}_slider', None)
@@ -830,10 +1028,10 @@ class EconomyEditorPanel(QtWidgets.QWidget):
 
         cap_mode = self._get_capacity_scaling_mode()
         _mode_previews = {
-            'Vanilla': "",
-            'Low': "Compressed scaling \u2014 small cargo still earns more, but the gap is halved",
-            'High': "Exaggerated scaling \u2014 small cargo up to 5\u00d7, bulk cargo down to 0.5\u00d7",
-            'Off': "All cargo pays the same base rate (1.0\u00d7 before economy multiplier)",
+            'Vanilla': "Weight penalty \u00d7 1.0 \u2014 default Motor Town behavior",
+            'Low': "Weight penalty \u00d7 0.5 \u2014 big trucks earn ~60% more per unit vs vanilla",
+            'High': "Weight penalty \u00d7 1.5 \u2014 big trucks earn less than vanilla, small trucks unchanged",
+            'Off': "Weight penalty \u00d7 0 \u2014 every vehicle size earns the small-vehicle rate",
         }
         self.scaling_preview.setText(_mode_previews.get(cap_mode, ""))
 
@@ -852,7 +1050,7 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         self.cargo_custom_hint.setVisible(customs['economy'])
         self.ini_custom_hint.setVisible(any_ini_custom)
 
-        self._update_cargo_table(mults['economy'], customs['economy'], cap_mode)
+        self._update_cargo_table(mults['economy'], customs['economy'])
         self._update_ini_table(
             mults['economy'], mults['bus'], mults['taxi'], mults['ambulance'],
             mults['fuel'], mults['vehicle'],
@@ -860,9 +1058,14 @@ class EconomyEditorPanel(QtWidgets.QWidget):
             customs['ambulance'], customs['fuel'], customs['vehicle'],
         )
 
-    def _update_cargo_table(self, eco_mult, eco_is_custom: bool,
-                            capacity_mode: str = 'Vanilla') -> None:
-        """Refresh cargo table. In Custom mode, Modified column is editable."""
+    def _update_cargo_table(self, eco_mult, eco_is_custom: bool) -> None:
+        """Refresh cargo table. In Custom mode, Modified column is editable.
+
+        Reflects Balance.json PaymentMultipliers only. The per-vehicle
+        capacity penalty (Vanilla/Low/High/Off mode on this panel) is a
+        separate axis delivered via the CryovacCargoScaling Lua mod and
+        does not show up in this table.
+        """
         self.cargo_table.blockSignals(True)
         vanilla_cargo = eco.get_cargo_payments(vanilla=True)
         self.cargo_table.setRowCount(len(vanilla_cargo))
@@ -890,8 +1093,7 @@ class EconomyEditorPanel(QtWidgets.QWidget):
                     mod_item.setForeground(QtGui.QColor(_TEXT))
                 mod_item.setBackground(QtGui.QColor(_EDITABLE_BG))
             else:
-                effective_base = eco._apply_capacity_mode(base_val, capacity_mode)
-                modified_val = round(effective_base * (eco_mult or 1.0), 6)
+                modified_val = round(base_val * (eco_mult or 1.0), 6)
                 mod_item = QtWidgets.QTableWidgetItem(f"{modified_val:.2f}")
                 mod_item.setFlags(mod_item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
                 if modified_val != base_val:

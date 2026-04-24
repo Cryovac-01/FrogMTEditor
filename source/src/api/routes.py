@@ -61,6 +61,7 @@ MOD_VEHICLEPARTS0_BASE = os.path.join(MOD_ROOT, 'MotorTown', 'Content', 'DataAss
 BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'backups')
 MOD_ENGINE_DIR = os.path.join(MOD_BASE, 'Engine')
 MOD_TIRE_DIR = os.path.join(MOD_BASE, 'Tire')
+MOD_TRANSMISSION_DIR = os.path.join(MOD_BASE, 'Transmission')
 SITE_ENGINE_REGISTRY = os.path.join(MOD_ROOT, 'site_engines.json')
 SITE_TIRE_REGISTRY = os.path.join(MOD_ROOT, 'site_tires.json')
 MOD_WRITE_LOCK = threading.RLock()
@@ -1597,17 +1598,47 @@ def get_parts_list() -> Dict:
             'in_shop': bool(tire_rows_by_asset.get(name)),
         })
 
+    # Scan transmissions (directory-based, no registry). The transmission
+    # editor writes .uasset/.uexp pairs directly into MOD_TRANSMISSION_DIR.
+    transmission_items: List[Dict[str, Any]] = []
+    if os.path.isdir(MOD_TRANSMISSION_DIR):
+        try:
+            entries = sorted(os.listdir(MOD_TRANSMISSION_DIR), key=str.lower)
+        except OSError:
+            entries = []
+        seen_names: set[str] = set()
+        for fname in entries:
+            if not fname.endswith('.uexp'):
+                continue
+            name = fname[:-5]
+            if name in seen_names:
+                continue
+            seen_names.add(name)
+            uasset_f = os.path.join(MOD_TRANSMISSION_DIR, name + '.uasset')
+            uexp_f = os.path.join(MOD_TRANSMISSION_DIR, fname)
+            if not os.path.isfile(uasset_f):
+                continue
+            transmission_items.append({
+                'name': name,
+                'source': 'mod',
+                'path': f'mod/Transmission/{name}',
+                'uexp_size': os.path.getsize(uexp_f),
+            })
+
     if engine_items:
         parts['Engine'] = sorted(engine_items, key=lambda p: p['name'].lower())
     if tire_items:
         parts['Tire'] = sorted(tire_items, key=lambda p: p['name'].lower())
+    if transmission_items:
+        parts['Transmission'] = sorted(transmission_items, key=lambda p: p['name'].lower())
     live = _current_live_state()
     return {
         'parts': parts,
         'state_version': live['version'],
         'engine_count': live['engine_count'],
         'tire_count': live.get('tire_count', len(tire_items)),
-        'part_count': live.get('part_count', len(engine_items) + len(tire_items)),
+        'transmission_count': len(transmission_items),
+        'part_count': live.get('part_count', len(engine_items) + len(tire_items) + len(transmission_items)),
     }
 
 

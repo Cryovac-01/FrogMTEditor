@@ -1277,6 +1277,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
 
         engine_rows = list(self.workspace_summary.groups.get("Engine", []))
         tire_rows = list(self.workspace_summary.groups.get("Tire", []))
+        transmission_rows = list(self.workspace_summary.groups.get("Transmission", []))
 
         if type_filter in {"All Parts", "Engines"}:
             engines_parent = make_parent(f"Engines ({len(engine_rows)})", self.icons["engine"])
@@ -1316,6 +1317,27 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
                 if path:
                     self.path_to_item[path] = child
             self.parts_model.appendRow(tires_parent)
+
+        if type_filter in {"All Parts", "Transmissions"}:
+            trans_parent = make_parent(
+                f"Transmissions ({len(transmission_rows)})",
+                self.icons.get("parts", self.icons["engine"]),
+            )
+            for row in transmission_rows:
+                if query and query not in row.display_name.lower() and query not in row.name.lower():
+                    continue
+                path = row.path
+                text = row.display_name
+                if path and path == dirty_path:
+                    text = f"{text}  •  unsaved"
+                child = QtGui.QStandardItem(text)
+                child.setEditable(False)
+                child.setIcon(self.icons.get("parts", self.icons["engine"]))
+                child.setData(path, PATH_ROLE)
+                trans_parent.appendRow(child)
+                if path:
+                    self.path_to_item[path] = child
+            self.parts_model.appendRow(trans_parent)
 
         self.parts_tree.expandAll()
         if selected_path and selected_path in self.path_to_item:
@@ -1907,6 +1929,12 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         shift = result.get('shift_time', 0)
         self._record_activity(f"Created transmission '{name}' with shift time {shift:.2f}s.")
         self.set_status(f"Transmission '{name}' created and staged for packing.")
+        # Refresh the workspace so the new transmission appears in the
+        # Generated Parts sidebar immediately, like engines and tires do.
+        try:
+            self.reload_workspace()
+        except Exception:
+            pass
 
     def _on_policy_applied(self, result: dict) -> None:
         """Handle policy settings applied signal."""

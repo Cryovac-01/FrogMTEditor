@@ -20,6 +20,9 @@ source/data/mod/MotorTown/Content/Cars/
 source/data/mod/site_engines.json
 source/data/mod/site_tires.json
 
+# Generated Lua-mod output (CryovacCargoScaling deploys)
+source/data/lua_mod_output/
+
 # OS files
 Thumbs.db
 .DS_Store
