@@ -19,19 +19,24 @@ MOD_NAME = 'CryovacExpMultiplier'
 UI_TITLE = 'EXP Multiplier'
 
 UI_DESCRIPTION = (
-    "Scales job-income XP gain. Vanilla Motor Town converts 10% of any "
-    "job income (cargo, taxi, bus, ambulance, tow, etc.) into XP via the "
-    "<code>JobIncomeToJobExpMultiplier</code> field on the global balance "
-    "table. This mod scales that coefficient at runtime on the live "
+    "Scales XP gain across every character level: Driver, Taxi, Bus, "
+    "Truck, Racer, Wrecker (Tow), and Police.\n\n"
+    "Two code paths are covered so no level type is left behind:\n"
+    "<br>\u2022 <b>Job types</b> (Taxi, Bus, Truck, Wrecker, Police) "
+    "gain XP as a percentage of job income. This mod rewrites the "
+    "<code>JobIncomeToJobExpMultiplier</code> field on "
     "<code>UMTGameResource</code> and <code>UMTBalanceSettings</code> "
-    "instances, so every income-derived XP grant multiplies by your "
-    "chosen factor.\n\n"
-    "<b>0.5\u00d7</b> \u2014 slower levelling (5% of income to XP).<br>"
-    "<b>1.0\u00d7</b> \u2014 vanilla (10% of income to XP).<br>"
-    "<b>2.0\u00d7</b> \u2014 2\u00d7 vanilla XP gain.<br>"
-    "<b>5.0\u00d7</b> \u2014 level up fast (50% of income to XP).\n\n"
-    "Direct-grant XP from races and one-off rewards goes through a "
-    "different path and isn't touched by this mod."
+    "to be <code>0.10 \u00d7 multiplier</code> (vanilla is 0.10).\n"
+    "<br>\u2022 <b>Driver and Racer</b> XP don\u2019t go through the "
+    "income path \u2014 they\u2019re granted directly by native code. "
+    "This mod pre-hooks <code>ClientAddExp</code> and mutates the "
+    "<code>exp</code> parameter in place for those two level types "
+    "only (job types are skipped here so they aren\u2019t "
+    "double-applied).\n\n"
+    "<b>0.5\u00d7</b> \u2014 slower levelling across the board.<br>"
+    "<b>1.0\u00d7</b> \u2014 vanilla (hook not installed, BalanceTable untouched).<br>"
+    "<b>2.0\u00d7</b> \u2014 2\u00d7 XP on every level type.<br>"
+    "<b>5.0\u00d7</b> \u2014 level up fast."
 )
 
 DEFAULT_CONFIG: Dict[str, Any] = {
@@ -192,14 +197,88 @@ local function ApplyMultiplier()
     return true
 end
 
+-- ============================================================
+-- ClientAddExp pre-hook for XP types NOT covered by
+-- JobIncomeToJobExpMultiplier.
+--
+-- The BalanceTable multiplier only scales job-income -> job-XP
+-- (CL_Taxi, CL_Bus, CL_Truck, CL_Wrecker, CL_Police). It does
+-- NOT scale CL_Driver (earned from driving activity) or
+-- CL_Racer (earned from races). To cover those, we hook
+-- ClientAddExp and mutate the `exp` parameter in place for
+-- those level types only. Job types are intentionally skipped
+-- here so we don't double-apply on top of the BalanceTable path.
+--
+-- EMTCharacterLevelType values (from EMTCharacterLevelType.h):
+--   0 = CL_Driver   (hooked here)
+--   1 = CL_Taxi     (covered by BalanceTable)
+--   2 = CL_Bus      (covered by BalanceTable)
+--   3 = CL_Truck    (covered by BalanceTable)
+--   4 = CL_Racer    (hooked here)
+--   5 = CL_Wrecker  (covered by BalanceTable - "Tow" in UI)
+--   6 = CL_Police   (covered by BalanceTable)
+-- ============================================================
+local NON_JOB_LEVEL_TYPES = {{
+    [0] = "CL_Driver",
+    [4] = "CL_Racer",
+}}
+
+local function Unwrap(obj)
+    if obj == nil then return nil end
+    local ok, val = pcall(function() return obj:get() end)
+    if ok and val ~= nil then return val end
+    return obj
+end
+
+local function SetupNonJobExpHook()
+    if math.abs(CONFIG.Multiplier - 1.0) < 1e-6 then
+        Log("Multiplier = 1.0 -- ClientAddExp hook not installed (mod is no-op).")
+        return
+    end
+    local ok, err = pcall(function()
+        RegisterHook(
+            "/Script/MotorTown.MotorTownPlayerController:ClientAddExp",
+            function(self, ctxWrap, levelTypeWrap, expWrap, msgWrap)
+                local levelType = Unwrap(levelTypeWrap)
+                -- TEnumAsByte unwraps to a number in UE4SS Lua
+                if type(levelType) ~= "number" then return end
+                local typeName = NON_JOB_LEVEL_TYPES[levelType]
+                if not typeName then return end  -- job type, skip
+
+                local exp = Unwrap(expWrap) or 0
+                if type(exp) ~= "number" or exp <= 0 then return end
+
+                local boosted = math.floor(exp * CONFIG.Multiplier)
+                if boosted <= exp then return end  -- no-op guard
+
+                local setOk, setErr = pcall(function() expWrap:set(boosted) end)
+                if setOk then
+                    Log(string.format("%s exp: %d -> %d (x%.2f)",
+                        typeName, exp, boosted, CONFIG.Multiplier))
+                else
+                    Log(string.format("%s exp set() failed: %s (unchanged)",
+                        typeName, tostring(setErr)))
+                end
+            end)
+    end)
+    if ok then
+        Log("Hook registered: MotorTownPlayerController:ClientAddExp "
+         .. "(scales CL_Driver + CL_Racer only)")
+    else
+        Log("ClientAddExp hook failed: " .. tostring(err))
+    end
+end
+
 Log("=== Cryovac EXP Multiplier Loading ===")
-Log(string.format("Multiplier: x%.2f (target: JobIncomeToJobExpMultiplier on %s)",
+Log(string.format("Multiplier: x%.2f (BalanceTable: JobIncomeToJobExpMultiplier on %s)",
     CONFIG.Multiplier, table.concat(CONFIG.TargetClasses, ", ")))
+Log("              (ClientAddExp hook: CL_Driver + CL_Racer)")
 
 ExecuteWithDelay(CONFIG.InitialDelayMs, function()
     if not ApplyMultiplier() then
         LoopAsync(5000, function() return ApplyMultiplier() end)
     end
+    SetupNonJobExpHook()
 end)
 
 Log("=== Cryovac EXP Multiplier Loaded ===")
@@ -229,16 +308,23 @@ def generate_readme(config: Dict[str, Any]) -> str:
         f"(vanilla is 0.10)\n\n"
         "WHAT THIS MOD DOES\n"
         "------------------\n"
-        "At session start, finds every live UMTGameResource and\n"
-        "UMTBalanceSettings instance and scales their nested\n"
-        "FMTBalanceTable.JobIncomeToJobExpMultiplier field by the\n"
-        "configured multiplier.\n\n"
-        "Every job-income XP grant (cargo, taxi, bus, ambulance, tow,\n"
-        "vehicle delivery, rescue) runs through this coefficient. Direct-\n"
-        "grant XP from races and one-off reward popups uses a different\n"
-        "code path and isn't affected by this mod.\n\n"
-        "Baseline is captured per instance on first apply, so hot-reload\n"
-        "or mod re-run won't compound the multiplier.\n"
+        "Covers ALL character level types (Driver, Taxi, Bus, Truck,\n"
+        "Racer, Wrecker/Tow, Police) using two complementary paths:\n\n"
+        "1. BalanceTable path (job income -> job XP)\n"
+        "   At session start, finds every live UMTGameResource and\n"
+        "   UMTBalanceSettings instance and rewrites their nested\n"
+        "   FMTBalanceTable.JobIncomeToJobExpMultiplier to\n"
+        "   (0.10 * multiplier). Every job-income-derived XP grant\n"
+        "   (Taxi, Bus, Truck, Wrecker, Police) runs through this.\n\n"
+        "2. ClientAddExp hook (direct-grant XP)\n"
+        "   Pre-hooks MotorTownPlayerController:ClientAddExp and\n"
+        "   mutates the `exp` parameter in place for CL_Driver (0)\n"
+        "   and CL_Racer (4) only - the two level types that don't\n"
+        "   go through the job-income path. Job types are skipped at\n"
+        "   this hook so they aren't double-applied.\n\n"
+        "The BalanceTable path uses a hardcoded vanilla baseline (0.10)\n"
+        "so any INI mod that also shifted JobIncomeToJobExpMultiplier\n"
+        "cannot compound with this multiplier - Lua is authoritative.\n"
     )
     return render_install_readme(MOD_NAME, body)
 
