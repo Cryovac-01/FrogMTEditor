@@ -80,6 +80,16 @@ _MAIN_LUA_TEMPLATE = '''--[[
 local CONFIG = {{
     Multiplier = {multiplier},
 
+    -- Hardcoded vanilla value so the final field is always
+    --     VanillaBaseline * Multiplier
+    -- regardless of what DefaultMotorTownBalance.ini (or any other mod)
+    -- may have already set it to. If we trusted the live read, an INI
+    -- that already shifted this value (e.g. Economy tab set to 2x
+    -- writing 0.20) would compound with our multiplier and produce
+    -- MultiplierSquared results. Hardcoding the vanilla 0.10 makes
+    -- this mod the authoritative source of truth.
+    VanillaBaseline = 0.10,
+
     -- Classes whose BalanceTable we'll modify. UMTGameResource is a
     -- UDataAsset loaded from the content tree; UMTBalanceSettings is
     -- a UDeveloperSettings CDO loaded from DefaultMotorTownBalance.ini.
@@ -103,7 +113,6 @@ local function SafeSet(obj, prop, value)
 end
 
 local applied = false
-local vanilla_baseline = {{}}   -- keyed by object:GetFullName()
 
 local function ApplyToInstance(obj)
     if not obj then return false end
@@ -116,28 +125,33 @@ local function ApplyToInstance(obj)
         return false
     end
 
-    local baseline = SafeGet(bt, "JobIncomeToJobExpMultiplier")
-    if type(baseline) ~= "number" then
+    local observed = SafeGet(bt, "JobIncomeToJobExpMultiplier")
+    if type(observed) ~= "number" then
         Log(string.format("  %s: JobIncomeToJobExpMultiplier missing; skipping", name))
         return false
     end
 
-    -- Capture the ORIGINAL (unmodified) value, not any value our own
-    -- previous run may have written. Keyed by object path.
-    if vanilla_baseline[name] == nil then
-        vanilla_baseline[name] = baseline
+    -- Always compute from the hardcoded vanilla, NEVER from what we
+    -- read. Reading is only used to detect if something else (e.g. the
+    -- INI pak's Economy tab) already shifted the field; if so, warn.
+    local target = CONFIG.VanillaBaseline * CONFIG.Multiplier
+    local drift = math.abs(observed - CONFIG.VanillaBaseline)
+    if drift > 1e-4 and math.abs(observed - target) > 1e-4 then
+        Log(string.format(
+            "  %s: observed %.4f != vanilla %.4f. INI or another mod set it; "
+         .. "overwriting with %.4f (x%.2f of vanilla) -- Lua is authoritative.",
+            name, observed, CONFIG.VanillaBaseline, target, CONFIG.Multiplier))
     end
 
-    local newValue = vanilla_baseline[name] * CONFIG.Multiplier
-    local ok, err = SafeSet(bt, "JobIncomeToJobExpMultiplier", newValue)
+    local ok, err = SafeSet(bt, "JobIncomeToJobExpMultiplier", target)
     if not ok then
         Log(string.format("  %s: SET failed: %s", name, tostring(err)))
         return false
     end
 
     local verify = SafeGet(bt, "JobIncomeToJobExpMultiplier")
-    Log(string.format("  %s: JobIncome->Exp %.4f -> %.4f (x%.2f)",
-        name, vanilla_baseline[name], verify or 0, CONFIG.Multiplier))
+    Log(string.format("  %s: JobIncome->Exp %.4f -> %.4f (x%.2f of vanilla %.4f)",
+        name, observed, verify or 0, CONFIG.Multiplier, CONFIG.VanillaBaseline))
     return true
 end
 
