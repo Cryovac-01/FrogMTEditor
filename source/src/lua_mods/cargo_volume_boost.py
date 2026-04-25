@@ -166,39 +166,117 @@ local typeNames = {{
 
 local baselines = {{}}   -- [componentKey] = {{t=typeInt, v=vanilla_DumpVolume}}
 
--- Clamp the owning vehicle's Net_Cargo.CargoWeightKg to the value it
--- would have at the vanilla volume. Called once per overloaded
--- component per poll. Safe to call more than once per vehicle (the
--- clamp is idempotent when vanilla_volume equals the current fill).
+-- Per-vehicle physics-mass calibration state.
+--   empty_mass        : chassis mass observed when LoadedItemVolume is
+--                       essentially zero. Captured once per vehicle.
+--   mass_per_volume   : kg added to the chassis per unit of loaded
+--                       volume. Computed any poll where we have a
+--                       non-trivial fill and have NOT overridden the
+--                       mass yet (so we're seeing the game's natural
+--                       value). Re-derived each poll while uncapped,
+--                       which lets us catch cargo type changes.
+--   mass_overridden   : whether SetMassOverrideInKg is currently active
+--                       on this vehicle's chassis Mesh.
+local vehicleMassStates = {{}}
+
+-- Clamp the OWNING VEHICLE's chassis physics mass when its cargo space
+-- is filled past the vanilla DumpVolume. Targets AMTVehicle.Mesh (a
+-- UStaticMeshComponent) via SetMassOverrideInKg, which is what Chaos
+-- vehicle physics actually reads. The earlier approach wrote to
+-- Net_Cargo.CargoWeightKg, but that field is HUD-display only - changing
+-- it never affected how the truck settled on its springs.
 local function MaybeClampWeight(comp, vanilla_volume)
     if not CONFIG.CapWeightAtVanilla then return end
+    if vanilla_volume <= 0 then return end
 
     local loaded = SafeGet(comp, "Net_LoadedItemVolume")
-    if type(loaded) ~= "number" or loaded <= vanilla_volume or vanilla_volume <= 0 then
-        return
-    end
+    if type(loaded) ~= "number" then return end
 
     local owner = nil
     pcall(function() owner = comp:GetOwner() end)
     if not owner then return end
 
-    local netCargo = SafeGet(owner, "Net_Cargo")
-    if not netCargo then return end
+    local mesh = SafeGet(owner, "Mesh")
+    if not mesh then return end
 
-    local currentWeight = SafeGet(netCargo, "CargoWeightKg")
-    if type(currentWeight) ~= "number" or currentWeight <= 0 then return end
+    local vehicleKey = ""
+    pcall(function() vehicleKey = owner:GetFullName() end)
+    if vehicleKey == "" then return end
 
-    -- Fraction of the current fill that's within vanilla. Past vanilla
-    -- is "free weight" (no physics contribution). Any fill fraction
-    -- above 1.0 means the truck is overloaded by our boost.
-    local ratio = vanilla_volume / loaded
-    if ratio >= 1.0 then return end
+    local state = vehicleMassStates[vehicleKey]
+    if state == nil then
+        state = {{
+            empty_mass = nil,
+            mass_per_volume = nil,
+            mass_overridden = false,
+        }}
+        vehicleMassStates[vehicleKey] = state
+    end
 
-    local cappedWeight = currentWeight * ratio
-    -- Only write when meaningfully different, to avoid thrashing
-    -- replication for no reason.
-    if math.abs(currentWeight - cappedWeight) < 1.0 then return end
-    pcall(function() netCargo.CargoWeightKg = cappedWeight end)
+    -- Read the chassis's CURRENT mass. Note: when our override is
+    -- active, this returns OUR value (not the natural one), which is
+    -- why we only re-derive mass_per_volume while uncapped.
+    local currentMass = nil
+    pcall(function() currentMass = mesh:GetMass() end)
+    if type(currentMass) ~= "number" or currentMass <= 0 then return end
+
+    -- Stage 1: capture empty chassis mass once per vehicle, when fill
+    -- is essentially zero.
+    local empty_threshold = math.max(1.0, vanilla_volume * 0.05)
+    if state.empty_mass == nil and loaded < empty_threshold then
+        state.empty_mass = currentMass
+        Log(string.format("calibrated empty mass for %s: %.0f kg",
+            vehicleKey, currentMass))
+    end
+    if state.empty_mass == nil then return end  -- need this to do anything
+
+    -- Stage 2: derive kg-per-volume slope while we're seeing the game's
+    -- natural mass (i.e. while no override is active). Re-derive every
+    -- poll so changes in cargo type recalibrate quickly.
+    if not state.mass_overridden and loaded > 1.0 then
+        local cargo_mass = currentMass - state.empty_mass
+        if cargo_mass > 0 then
+            state.mass_per_volume = cargo_mass / loaded
+        end
+    end
+    if state.mass_per_volume == nil then return end  -- no slope yet
+
+    -- Compute target physics mass as if filled only to vanilla.
+    local effective_volume = math.min(loaded, vanilla_volume)
+    local target_mass = state.empty_mass + state.mass_per_volume * effective_volume
+
+    if loaded > vanilla_volume then
+        -- Overloaded: apply / refresh the override every poll. NAME_None
+        -- (empty FName) targets the root body of the component.
+        local ok = pcall(function()
+            mesh:SetMassOverrideInKg("None", target_mass, true)
+        end)
+        if ok and not state.mass_overridden then
+            Log(string.format(
+                "%s mass clamped: %.0f -> %.0f kg (loaded %.1f / vanilla %.1f, slope %.2f kg/u)",
+                vehicleKey, currentMass, target_mass,
+                loaded, vanilla_volume, state.mass_per_volume))
+        end
+        state.mass_overridden = ok or state.mass_overridden
+
+        -- Also drive the HUD-display field down so the cargo readout
+        -- matches what the truck actually weighs in physics.
+        local netCargo = SafeGet(owner, "Net_Cargo")
+        if netCargo then
+            local hudWeight = state.mass_per_volume * effective_volume
+            pcall(function() netCargo.CargoWeightKg = hudWeight end)
+        end
+    elseif state.mass_overridden then
+        -- Back below vanilla: drop the override, let the game manage
+        -- mass naturally again. Calling with bOverride=false restores
+        -- the body's auto-computed mass on the next physics tick.
+        pcall(function()
+            mesh:SetMassOverrideInKg("None", 0.0, false)
+        end)
+        state.mass_overridden = false
+        Log(string.format("%s mass override cleared (loaded %.1f <= vanilla %.1f)",
+            vehicleKey, loaded, vanilla_volume))
+    end
 end
 
 local function ApplyToAllComponents()
@@ -340,12 +418,25 @@ def generate_readme(config: Dict[str, Any]) -> str:
         "if you fill a tanker twice as much, the vehicle weighs twice\n"
         "as much. Combining that with a volume boost can slam the\n"
         "suspension when the truck is overloaded.\n\n"
-        "When \"Ignore increased weight\" is checked, the mod clamps\n"
-        "each overloaded vehicle's Net_Cargo.CargoWeightKg to the\n"
-        "proportion that falls inside the vanilla DumpVolume. Any\n"
-        "fill past vanilla contributes no physics mass. The cargo\n"
-        "still fits and still pays out; only the suspension stress\n"
-        "stays at vanilla-loaded levels.\n"
+        "When \"Ignore increased weight\" is checked, the mod calls\n"
+        "AMTVehicle.Mesh:SetMassOverrideInKg() on the chassis static\n"
+        "mesh component for any overloaded vehicle. The override is\n"
+        "computed per-vehicle:\n\n"
+        "  1. On first sight while the truck is empty (LoadedVolume\n"
+        "     near zero), the mod records the chassis 'empty mass'.\n"
+        "  2. Whenever the truck is filled but not yet overloaded,\n"
+        "     the mod measures the kg-per-unit-volume slope.\n"
+        "  3. When fill exceeds vanilla DumpVolume, the chassis mass\n"
+        "     is overridden to (empty_mass + slope * vanilla_volume),\n"
+        "     i.e. what the truck would weigh at exactly vanilla fill.\n"
+        "  4. As soon as the truck drops back to or below vanilla\n"
+        "     volume, the override is cleared and natural physics\n"
+        "     resume.\n\n"
+        "Because the override targets the actual physics mass (not the\n"
+        "HUD field), the suspension behaves identically to vanilla\n"
+        "regardless of how much extra cargo the boost lets you carry.\n"
+        "The HUD CargoWeightKg readout is also clamped so the displayed\n"
+        "weight matches the physics weight.\n"
     )
     return render_install_readme(MOD_NAME, body)
 
