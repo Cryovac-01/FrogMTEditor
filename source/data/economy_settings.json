@@ -1,18 +1,16 @@
 {
-  "economy_multiplier": 1.0,
+  "economy_multiplier": 3.0,
   "economy_custom": false,
-  "bus_multiplier": 10.0,
+  "bus_multiplier": 3.0,
   "bus_custom": false,
-  "taxi_multiplier": 1.0,
+  "taxi_multiplier": 3.0,
   "taxi_custom": false,
-  "ambulance_multiplier": 1.0,
+  "ambulance_multiplier": 3.0,
   "ambulance_custom": false,
   "fuel_multiplier": 0.5,
   "fuel_custom": false,
   "vehicle_multiplier": 0.5,
   "vehicle_custom": false,
-  "capacity_scaling_mode": "Vanilla",
-  "profit_share": "20%",
   "custom_cargo_overrides": {},
   "custom_ini_overrides": {}
 }

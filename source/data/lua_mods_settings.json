@@ -1,0 +1,65 @@
+{
+  "CryovacCargoScaling": {
+    "enabled": true,
+    "config": {
+      "mode": "Off"
+    }
+  },
+  "CryovacCargoVolumeBoost": {
+    "enabled": true,
+    "config": {
+      "tanker_multiplier": 2.5,
+      "dump_multiplier": 2.5,
+      "dry_bulk_multiplier": 2.5,
+      "garbage_multiplier": 2.5
+    }
+  },
+  "CryovacCompanyProfitBoost": {
+    "enabled": true,
+    "config": {
+      "multiplier": 4.0
+    }
+  },
+  "CryovacCompanyVehicleCare": {
+    "enabled": true,
+    "config": {
+      "running_cost_mode": "Low",
+      "condition_multiplier": 0.5,
+      "condition_offroad_multiplier": 0.5
+    }
+  },
+  "CryovacCompanyVehicleLimits": {
+    "enabled": true,
+    "config": {
+      "max_added_slots": 15
+    }
+  },
+  "CryovacExpMultiplier": {
+    "enabled": true,
+    "config": {
+      "multiplier": 2.0
+    }
+  },
+  "CryovacPopulationBoost": {
+    "enabled": true,
+    "config": {
+      "resident_multiplier": 3.0,
+      "taxi_multiplier": 4.0,
+      "ambulance_multiplier": 4.0,
+      "bus_spawn_speed_multiplier": 3.0
+    }
+  },
+  "CryovacSkipNight": {
+    "enabled": true,
+    "config": {
+      "day_start_hour": 6.0,
+      "day_end_hour": 20.0
+    }
+  },
+  "CryovacSlowDecay": {
+    "enabled": true,
+    "config": {
+      "decay_reduction": 0.8
+    }
+  }
+}
