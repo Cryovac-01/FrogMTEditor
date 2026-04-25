@@ -167,31 +167,43 @@ local typeNames = {{
 local baselines = {{}}   -- [componentKey] = {{t=typeInt, v=vanilla_DumpVolume}}
 
 -- Per-vehicle physics-mass calibration state.
---   empty_mass      : chassis mass observed when LoadedItemVolume is
+--   body            : the UPrimitiveComponent we drive mass on.
+--                     AMTVehicle has BOTH a UMTVehicleRootComponent
+--                     (RootBody, USphereComponent-derived, the actual
+--                     physics root that carries cargo weight) and a
+--                     UStaticMeshComponent (Mesh, the visual chassis).
+--                     We prefer RootBody and fall back to Mesh, then
+--                     cache the choice so we don't keep rediscovering.
+--   empty_mass      : body mass observed when LoadedItemVolume is
 --                     essentially zero AND no scale is active.
 --                     Captured once per vehicle.
---   mass_per_volume : kg added to the chassis per unit of loaded
---                     volume. Calibrated whenever fill > 1.0 AND
---                     scale_active is false (so GetMass returns the
---                     game's natural mass, not our scaled view of it).
---                     Re-derived each uncapped poll, which catches
---                     cargo-type changes in the same vehicle.
+--   mass_per_volume : kg added to the body per unit of loaded volume.
+--                     Calibrated whenever fill > 1.0 AND scale_active
+--                     is false (so GetMass returns the game's natural
+--                     mass, not our scaled view).
+--   slope_logged    : have we logged the slope value yet (one-shot)
+--   overload_logged : have we logged that this vehicle was overloaded
+--                     (one-shot, so the log shows the moment it
+--                     crossed the cap even if the clamp can't engage)
 --   scale_active    : whether SetMassScale != 1.0 is currently in
---                     effect on this vehicle. We must NOT read GetMass
---                     for calibration while this is true, because the
---                     value would already include our scaling.
+--                     effect on this vehicle.
 local vehicleMassStates = {{}}
 
+-- Resolve the vehicle's physics-bearing primitive component. RootBody
+-- carries the cargo weight in MT (it's the truck's chassis sphere
+-- collider); Mesh is visual only on most blueprints.
+local function GetPhysicsBody(owner)
+    local rb = SafeGet(owner, "RootBody")
+    if rb then return rb, "RootBody" end
+    local mesh = SafeGet(owner, "Mesh")
+    if mesh then return mesh, "Mesh" end
+    return nil, nil
+end
+
 -- Clamp the OWNING VEHICLE's chassis physics mass when its cargo space
--- is filled past the vanilla DumpVolume. Drives AMTVehicle.Mesh's
--- BodyInstance via SetMassScale rather than SetMassOverrideInKg.
---
--- Why SetMassScale: SetMassOverrideInKg writes the override field but
--- does NOT call UpdateMassProperties, so on an already-spawned vehicle
--- the new value never reaches the simulating body - the call is a
--- silent no-op. SetMassScale writes MassScale AND triggers
--- UpdateMassProperties immediately, so the chassis sees the new mass
--- on the next physics tick.
+-- is filled past the vanilla DumpVolume. Drives the body's MassScale
+-- (which calls UpdateMassProperties immediately, unlike SetMassOverride
+-- which only takes effect at body creation).
 local function MaybeClampWeight(comp, vanilla_volume)
     if not CONFIG.CapWeightAtVanilla then return end
     if vanilla_volume <= 0 then return end
@@ -203,90 +215,106 @@ local function MaybeClampWeight(comp, vanilla_volume)
     pcall(function() owner = comp:GetOwner() end)
     if not owner then return end
 
-    local mesh = SafeGet(owner, "Mesh")
-    if not mesh then return end
-
     local vehicleKey = ""
     pcall(function() vehicleKey = owner:GetFullName() end)
     if vehicleKey == "" then return end
 
     local state = vehicleMassStates[vehicleKey]
     if state == nil then
+        local body, bodyName = GetPhysicsBody(owner)
+        if not body then return end
         state = {{
+            body = body,
+            body_name = bodyName,
             empty_mass = nil,
             mass_per_volume = nil,
+            slope_logged = false,
+            overload_logged = false,
             scale_active = false,
         }}
         vehicleMassStates[vehicleKey] = state
     end
 
-    -- Calibration: read the chassis's mass ONLY while no scale is
-    -- active. Once we've scaled, GetMass returns BaseMass*MassScale,
-    -- which would corrupt our slope estimate.
+    local body = state.body
+
+    -- Calibration: read the body's mass ONLY while no scale is active.
+    -- Once scaled, GetMass returns BaseMass*MassScale; using that
+    -- would feedback-collapse the slope.
     if not state.scale_active then
         local currentMass = nil
-        pcall(function() currentMass = mesh:GetMass() end)
+        pcall(function() currentMass = body:GetMass() end)
         if type(currentMass) == "number" and currentMass > 0 then
             -- Stage 1: capture empty mass when truck is essentially empty.
             local empty_threshold = math.max(1.0, vanilla_volume * 0.05)
             if state.empty_mass == nil and loaded < empty_threshold then
                 state.empty_mass = currentMass
-                Log(string.format("calibrated empty mass for %s: %.0f kg",
-                    vehicleKey, currentMass))
+                Log(string.format("calibrated empty mass for %s [%s]: %.0f kg",
+                    vehicleKey, state.body_name, currentMass))
             end
             -- Stage 2: derive kg-per-volume slope.
             if state.empty_mass and loaded > 1.0 then
                 local cargo_mass = currentMass - state.empty_mass
                 if cargo_mass > 0 then
                     state.mass_per_volume = cargo_mass / loaded
+                    if not state.slope_logged then
+                        Log(string.format(
+                            "calibrated slope for %s [%s]: %.2f kg/u "
+                         .. "(empty=%.0f, observed=%.0f at loaded=%.1f)",
+                            vehicleKey, state.body_name, state.mass_per_volume,
+                            state.empty_mass, currentMass, loaded))
+                        state.slope_logged = true
+                    end
                 end
             end
         end
     end
 
+    -- Diagnostic: log the moment a vehicle crosses vanilla cap, even
+    -- if we can't clamp yet. Helps confirm whether the trigger condition
+    -- is being reached.
+    if loaded > vanilla_volume and not state.overload_logged then
+        Log(string.format(
+            "%s overloaded: loaded=%.1f vanilla=%.1f (have_slope=%s, scaled=%s)",
+            vehicleKey, loaded, vanilla_volume,
+            tostring(state.mass_per_volume ~= nil),
+            tostring(state.scale_active)))
+        state.overload_logged = true
+    end
+
     if state.empty_mass == nil or state.mass_per_volume == nil then
-        -- Not enough calibration data yet. We'll catch up on a future
-        -- poll where the truck is uncapped and has a sample.
+        -- Not enough calibration data yet. Will catch up on a future
+        -- uncapped poll once the truck has a non-trivial fill.
         return
     end
 
-    -- Compute natural and target masses purely from calibration. We
-    -- don't read GetMass when scale is active, so the calculation
-    -- can't drift even when the override is engaged.
     local effective_volume = math.min(loaded, vanilla_volume)
     local target_mass  = state.empty_mass + state.mass_per_volume * effective_volume
     local natural_mass = state.empty_mass + state.mass_per_volume * loaded
 
     if loaded > vanilla_volume then
-        -- Overloaded: scale chassis mass down to (target / natural).
-        -- Since BodyInstance.MassScale REPLACES (not multiplies) the
-        -- previous scale, applying every poll is idempotent.
         if natural_mass <= 0 then return end
         local scale = target_mass / natural_mass
-        local ok = pcall(function() mesh:SetMassScale("None", scale) end)
+        local ok = pcall(function() body:SetMassScale("None", scale) end)
         if ok and not state.scale_active then
             Log(string.format(
-                "%s mass clamped: natural=%.0f kg -> physics=%.0f kg "
+                "%s mass clamped on [%s]: natural=%.0f kg -> physics=%.0f kg "
              .. "(loaded %.1f / vanilla %.1f, scale %.3f, slope %.2f kg/u)",
-                vehicleKey, natural_mass, target_mass,
+                vehicleKey, state.body_name, natural_mass, target_mass,
                 loaded, vanilla_volume, scale, state.mass_per_volume))
         end
         if ok then state.scale_active = true end
 
-        -- Drive the HUD-display field to match physics weight so the
-        -- cargo readout doesn't lie.
         local netCargo = SafeGet(owner, "Net_Cargo")
         if netCargo then
             local hudWeight = state.mass_per_volume * effective_volume
             pcall(function() netCargo.CargoWeightKg = hudWeight end)
         end
     elseif state.scale_active then
-        -- Back below vanilla: reset MassScale to 1.0 so the chassis
-        -- returns to its natural mass on the next physics tick.
-        pcall(function() mesh:SetMassScale("None", 1.0) end)
+        pcall(function() body:SetMassScale("None", 1.0) end)
         state.scale_active = false
-        Log(string.format("%s mass scale released (loaded %.1f <= vanilla %.1f)",
-            vehicleKey, loaded, vanilla_volume))
+        state.overload_logged = false  -- arm the next overload log
+        Log(string.format("%s mass scale released [%s] (loaded %.1f <= vanilla %.1f)",
+            vehicleKey, state.body_name, loaded, vanilla_volume))
     end
 end
 
@@ -430,12 +458,14 @@ def generate_readme(config: Dict[str, Any]) -> str:
         "as much. Combining that with a volume boost can slam the\n"
         "suspension when the truck is overloaded.\n\n"
         "When \"Ignore increased weight\" is checked, the mod calls\n"
-        "AMTVehicle.Mesh:SetMassScale() on the chassis static-mesh\n"
-        "component for any overloaded vehicle. SetMassScale is the\n"
-        "BodyInstance entry point that runs UpdateMassProperties\n"
-        "immediately - SetMassOverrideInKg writes the override field\n"
-        "but doesn't recompute the body's effective mass at runtime,\n"
-        "so it has no effect on already-spawned vehicles.\n\n"
+        "SetMassScale on AMTVehicle.RootBody (a UMTVehicleRootComponent\n"
+        "/ USphereComponent - the truck's actual physics root that\n"
+        "carries cargo weight). Falls back to AMTVehicle.Mesh if\n"
+        "RootBody is null. SetMassScale is the BodyInstance entry\n"
+        "point that runs UpdateMassProperties immediately;\n"
+        "SetMassOverrideInKg writes the override field but doesn't\n"
+        "recompute the body's effective mass at runtime, so it has no\n"
+        "effect on already-spawned vehicles.\n\n"
         "Per-vehicle calibration:\n\n"
         "  1. On first sight while the truck is empty (LoadedVolume\n"
         "     near zero) and not yet scaled, the mod records the\n"
