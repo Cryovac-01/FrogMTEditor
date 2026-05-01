@@ -4297,10 +4297,18 @@ def create_engine(data: Dict) -> Dict:
             if not sound_dir:
                 sound_dir = template_spec.sound_dir or None
 
-    # Extract and validate peak torque/HP RPM and Max HP (required fields)
-    peak_torque_rpm_str = properties.pop('_peak_torque_rpm', '')
-    peak_hp_rpm_str = properties.pop('_peak_hp_rpm', '')
-    max_hp_str = properties.pop('_max_hp', '')
+    # Extract and validate peak torque/HP RPM and Max HP (required fields).
+    # Strip thousands-separator commas so "12,000" parses identically to
+    # "12000" — UX nicety: users can type either form.
+    def _strip_commas(s: str) -> str:
+        return s.replace(',', '') if isinstance(s, str) else s
+
+    peak_torque_rpm_str = _strip_commas(properties.pop('_peak_torque_rpm', ''))
+    peak_hp_rpm_str = _strip_commas(properties.pop('_peak_hp_rpm', ''))
+    max_hp_str = _strip_commas(properties.pop('_max_hp', ''))
+    # Apply the same stripping to every other property value so the
+    # downstream float()/int() conversions don't choke on commas.
+    properties = {k: _strip_commas(v) for k, v in properties.items()}
     try:
         peak_torque_rpm = float(peak_torque_rpm_str)
     except (TypeError, ValueError):

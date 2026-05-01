@@ -25,16 +25,31 @@ VEHICLE_TYPE_CHOICES = [
 
 # Engine fuel type choices. The three types Motor Town actually
 # supports. Each entry: (display_label, internal_key).
-# Future use: filter visible properties on the form so gas-only
-# fields (FuelConsumption, IdleThrottle, exhaust audio) and EV-only
-# fields (battery, regen) are hidden when not relevant. For now the
-# selection is just persisted with the engine's creation_inputs so
-# fork / re-edit flows keep the user's choice.
+# The form filters visible properties so EV-only fields are only
+# shown when Electric is selected, and the underlying FuelType enum
+# is auto-set from this combo at create time.
 FUEL_TYPE_CHOICES = [
     ('Gasoline', 'gas'),
     ('Diesel',   'diesel'),
     ('Electric', 'electric'),
 ]
+
+# Engine property keys that only make sense on EV engines. Hidden
+# from the form whenever Fuel Type is Gasoline or Diesel.
+EV_ONLY_ENGINE_PROPERTIES = (
+    "MaxRegenTorqueRatio",
+    "MotorMaxPower",
+    "MotorMaxVoltage",
+)
+
+# Maps the Fuel Type combo value to MT's FuelType enum integer
+# (FuelType property on the engine row). 1=Gas, 2=Diesel, 3=Electric.
+# 0=Gas (legacy alias) is intentionally not used here.
+FUEL_TYPE_TO_ENUM = {
+    'gas':      1,
+    'diesel':   2,
+    'electric': 3,
+}
 
 # Tire vehicle type choices.
 # Each entry: (display_label, donor_row_name in VehicleParts0).
@@ -84,6 +99,11 @@ class PartEditorForm(QtWidgets.QWidget):
         self.peak_hp_rpm_input: Optional[QtWidgets.QLineEdit] = None
         self.vehicle_type_combo: Optional[QtWidgets.QComboBox] = None
         self.fuel_type_combo: Optional[QtWidgets.QComboBox] = None
+        # Row-wrapper widgets keyed by property name. Used to hide /
+        # show whole rows (label + input + helper text) dynamically
+        # in response to the Fuel Type combo, e.g. EV-only properties
+        # show only when Electric is selected.
+        self.property_row_widgets: Dict[str, QtWidgets.QWidget] = {}
 
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -134,6 +154,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.peak_hp_rpm_input = None
         self.vehicle_type_combo = None
         self.fuel_type_combo = None
+        self.property_row_widgets = {}
         self._clear_content()
 
         frame = QtWidgets.QFrame()
@@ -248,7 +269,9 @@ class PartEditorForm(QtWidgets.QWidget):
         below Vehicle Type. Default selection is derived from the
         donor when available (EV donors -> Electric, otherwise
         Gasoline). User-entered value (saved on previous fork) wins
-        over the donor-derived default."""
+        over the donor-derived default. When the user changes the
+        selection, EV-only property rows are shown / hidden so the
+        form only exposes fields that apply to the chosen fuel type."""
         label = QtWidgets.QLabel("Fuel Type")
         set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
         combo = QtWidgets.QComboBox()
@@ -262,10 +285,28 @@ class PartEditorForm(QtWidgets.QWidget):
                 combo.setCurrentIndex(i)
                 break
         self._connect_widget(combo)
+        # Re-apply property visibility every time the user picks a
+        # different fuel type. Hooked here (not _connect_widget) so
+        # we run our own logic in addition to the generic 'changed'
+        # signal that _connect_widget wires up.
+        combo.currentIndexChanged.connect(self._apply_fuel_type_visibility)
         form.addRow(label, combo)
         self.fuel_type_combo = combo
         self.shop_widgets["fuel_type"] = combo
         self.shop_kinds["fuel_type"] = "combo_data"
+
+    def _apply_fuel_type_visibility(self) -> None:
+        """Hide EV-only property rows when the Fuel Type combo is set
+        to Gasoline or Diesel; show them when Electric is selected.
+        Safe to call before or after the property rows have been
+        built — missing keys are simply skipped."""
+        if self.fuel_type_combo is None:
+            return
+        is_electric = (self.fuel_type_combo.currentData() == 'electric')
+        for prop_key in EV_ONLY_ENGINE_PROPERTIES:
+            wrapper = self.property_row_widgets.get(prop_key)
+            if wrapper is not None:
+                wrapper.setVisible(is_electric)
 
     def _add_tire_vehicle_type_entry(self, form: QtWidgets.QFormLayout, current_value: str = '') -> None:
         """Add a Vehicle Type dropdown for tire creation."""
@@ -376,6 +417,10 @@ class PartEditorForm(QtWidgets.QWidget):
                 line.setToolTip(helper_text)
 
             parent_layout.addWidget(wrapper)
+            # Track the row wrapper so the fuel-type visibility logic
+            # can hide / show it later (label + input + helper move
+            # as one unit when we toggle wrapper.visible).
+            self.property_row_widgets[key] = wrapper
 
             # Engine creator: "Max HP [value] HP @ [RPM] RPM" row after MaxRPM
             if self.creator_mode and self.part_type == "engine" and key == "MaxRPM":
@@ -551,6 +596,10 @@ class PartEditorForm(QtWidgets.QWidget):
         self.original_shop = {key: self._get_widget_value(key, self.shop_widgets, self.shop_kinds) for key in self.shop_widgets}
         self.original_props = {key: widget.text() for key, widget in self.property_widgets.items()}
         self.scroll.verticalScrollBar().setValue(0)
+        # Apply EV-only / ICE field visibility based on the current Fuel
+        # Type combo selection. Run after row widgets are built; safe
+        # to call even if the form has no fuel combo (no-op then).
+        self._apply_fuel_type_visibility()
 
     def has_changes(self) -> bool:
         return bool(self.get_changed_payload())
@@ -621,7 +670,19 @@ class PartEditorForm(QtWidgets.QWidget):
         if self.vehicle_type_combo is not None:
             payload['_vehicle_type'] = str(self.vehicle_type_combo.currentData() or '')
         if self.fuel_type_combo is not None:
-            payload['_fuel_type'] = str(self.fuel_type_combo.currentData() or '')
+            fuel_key = str(self.fuel_type_combo.currentData() or '')
+            payload['_fuel_type'] = fuel_key
+            # Inject the FuelType property value derived from the
+            # Fuel Type combo. The user-facing field is hidden in the
+            # creator, but the underlying engine row still needs the
+            # right enum (1=Gasoline, 2=Diesel, 3=Electric).
+            enum_value = FUEL_TYPE_TO_ENUM.get(fuel_key)
+            if enum_value is not None:
+                payload['FuelType'] = str(enum_value)
+        # Strip thousands-separator commas from every value so users
+        # can write "12,000" naturally and the server parses it fine.
+        payload = {k: v.replace(',', '') if isinstance(v, str) else v
+                   for k, v in payload.items()}
         return payload
 
     def get_current_property_strings(self) -> Dict[str, str]:

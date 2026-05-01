@@ -499,6 +499,18 @@ class CreatorWorkspace(QtWidgets.QWidget):
             self.form.clear()
         self._set_status("Choose a template or donor to begin.", "notice")
 
+    # Engine-creator fields the user shouldn't touch directly. They're
+    # either set automatically from other inputs (FuelType -> derived
+    # from the Fuel Type combo) or kept at the donor's template default
+    # to avoid users accidentally producing broken engines (Thermal and
+    # Effects, EngineType enum).
+    _ALWAYS_HIDDEN_ENGINE_FIELDS = (
+        "FuelType",
+        "HeatingPower",
+        "AfterFireProbability",
+        "EngineType",
+    )
+
     def begin_engine(self, sound_options: List[Dict[str, str]], live_version: str,
                      fixed_template: Optional[Dict[str, Any]] = None,
                      initial_donor: Optional[Dict[str, Any]] = None) -> None:
@@ -515,7 +527,7 @@ class CreatorWorkspace(QtWidgets.QWidget):
         self.part_type = "engine"
         self.current_row = None
         self.current_detail = None
-        self._install_form()
+        self._install_form(hidden_properties=self._ALWAYS_HIDDEN_ENGINE_FIELDS)
         self.eyebrow_label.setText("FORK" if fixed_template else "CREATE")
         self.title_label.setText("Fork Engine" if fixed_template else "Create Engine")
         self.recommend_button.show()
