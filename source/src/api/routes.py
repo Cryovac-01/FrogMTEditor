@@ -2401,7 +2401,24 @@ def save_part(part_path: str, data: Dict) -> Dict:
 
         shop = data.get('shop') or {}
         new_sound_dir = data.get('sound_dir') or ''
-        if new_data is None and not shop and not new_sound_dir:
+        # volume_offset may legitimately be 0 (user moved slider back to
+        # vanilla) so we test for key presence, not truthiness. The
+        # widget always sends an int; coerce defensively in case the
+        # client encodes it as a string.
+        _vol_provided = 'volume_offset' in data
+        try:
+            _new_volume_offset = int(data.get('volume_offset')) if _vol_provided else None
+        except (TypeError, ValueError):
+            _new_volume_offset = None
+            _vol_provided = False
+        if _new_volume_offset is not None:
+            _new_volume_offset = max(-25, min(25, _new_volume_offset))
+        if (
+            new_data is None
+            and not shop
+            and not new_sound_dir
+            and _new_volume_offset is None
+        ):
             return {'error': 'No changes applied'}
 
         saved_msg = ''
@@ -2519,6 +2536,44 @@ def save_part(part_path: str, data: Dict) -> Dict:
                 saved_msg += f'; shop {verb} ({raw_display}, ${new_price}, {new_weight}kg)'
             except Exception as _shop_err:
                 saved_msg += f' [shop update skipped: {_shop_err}]'
+
+        # Volume slider edit: write the new offset into the engine's
+        # .creation.json sidecar and regenerate the Lua mod. This is
+        # the path used when the user re-tunes an existing engine
+        # without going through the Creator (so they don't need to
+        # fork). Engines with no existing sidecar still get one — the
+        # .creation.json becomes the source of truth for audio offsets.
+        if parser_type == 'engine' and _new_volume_offset is not None:
+            try:
+                import json as _json
+                engine_key = os.path.splitext(os.path.basename(uexp_path))[0]
+                engine_dir = os.path.dirname(uexp_path)
+                _meta_path = os.path.join(engine_dir, engine_key + '.creation.json')
+                _existing: Dict[str, Any] = {}
+                if os.path.isfile(_meta_path):
+                    try:
+                        with open(_meta_path, 'r') as _mf:
+                            _existing = _json.load(_mf) or {}
+                    except Exception:
+                        _existing = {}
+                _existing['volume_offset'] = int(_new_volume_offset)
+                with open(_meta_path, 'w') as _mf:
+                    _json.dump(_existing, _mf)
+                saved_msg += f'; volume offset {_new_volume_offset:+d}'
+                # Regenerate the Lua mod from the workspace's full
+                # state — same call create_engine makes.
+                try:
+                    from lua_mods import engine_volume as _engine_volume
+                    _engine_volume.deploy_from_engine_workspace(engine_dir)
+                except Exception as _vol_exc:
+                    logger.info(
+                        "Engine volume Lua redeploy failed for '%s': %s",
+                        engine_key, _vol_exc,
+                    )
+            except Exception as _meta_exc:
+                # Sidecar write failure is non-fatal — surface it but
+                # don't roll back the engine save.
+                saved_msg += f' [volume sidecar update skipped: {_meta_exc}]'
 
         if parser_type == 'engine':
             try:

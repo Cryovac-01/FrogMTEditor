@@ -470,6 +470,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.fuel_type_combo: Optional[QtWidgets.QComboBox] = None
         self.level_requirements_widget: Optional[LevelRequirementsWidget] = None
         self.volume_offset_widget: Optional[VolumeOffsetWidget] = None
+        self.original_volume_offset: Optional[int] = None
         # Row-wrapper widgets keyed by property name. Used to hide /
         # show whole rows (label + input + helper text) dynamically
         # in response to the Fuel Type combo, e.g. EV-only properties
@@ -533,6 +534,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.fuel_type_combo = None
         self.level_requirements_widget = None
         self.volume_offset_widget = None
+        self.original_volume_offset = None
         self.property_row_widgets = {}
         self._previous_fuel_type = ""
         self._suppress_fuel_handler = False
@@ -1037,8 +1039,19 @@ class PartEditorForm(QtWidgets.QWidget):
             self._add_shop_entry(form, "price", "Price", format_number(shop.get("price")))
             self._add_shop_entry(form, "weight", "Weight (kg)", format_number(shop.get("weight")))
             self._add_sound_entry(form, sound_meta.get("dir") or "")
+            # Volume Adjustment slider belongs near the sound dropdown
+            # because they're conceptually paired — picking a sound
+            # pack tuned for a different vehicle class is the main
+            # reason a user would touch this slider. We surface it in
+            # BOTH modes (creator + regular editor) so the user can
+            # re-tune an existing engine's volume without having to
+            # fork it.
+            creation_inputs = (metadata.get('creation_inputs') or {})
+            self._add_volume_offset_entry(
+                form,
+                saved=creation_inputs.get('volume_offset'),
+            )
             if self.creator_mode:
-                creation_inputs = (metadata.get('creation_inputs') or {})
                 self._add_vehicle_type_entry(form, creation_inputs.get('vehicle_type', ''))
                 self._add_fuel_type_entry(
                     form,
@@ -1048,10 +1061,6 @@ class PartEditorForm(QtWidgets.QWidget):
                 self._add_level_requirements_entry(
                     form,
                     saved=creation_inputs.get('level_requirements'),
-                )
-                self._add_volume_offset_entry(
-                    form,
-                    saved=creation_inputs.get('volume_offset'),
                 )
         elif self.part_type == "tire":
             self._add_shop_entry(form, "display_name", "Display Name", shop.get("display_name") or part.get("name") or "")
@@ -1094,6 +1103,14 @@ class PartEditorForm(QtWidgets.QWidget):
 
         self.original_shop = {key: self._get_widget_value(key, self.shop_widgets, self.shop_kinds) for key in self.shop_widgets}
         self.original_props = {key: widget.text() for key, widget in self.property_widgets.items()}
+        # Snapshot the volume slider's loaded value so get_changed_payload
+        # can detect "user moved the slider" in non-creator mode. None
+        # means the field isn't present (e.g. tire editor) — change
+        # detection then short-circuits.
+        self.original_volume_offset = (
+            int(self.volume_offset_widget.to_payload())
+            if self.volume_offset_widget is not None else None
+        )
         self.scroll.verticalScrollBar().setValue(0)
         # Apply EV-only / ICE field visibility based on the current Fuel
         # Type combo selection. Run after row widgets are built; safe
@@ -1127,6 +1144,14 @@ class PartEditorForm(QtWidgets.QWidget):
             sound_current = self.collect_sound_dir()
             if sound_current != self.original_shop.get("sound_dir", ""):
                 payload["sound_dir"] = sound_current
+            # Volume slider — included whenever the user has moved it
+            # off its loaded value, regardless of creator/edit mode.
+            # Server side updates the .creation.json sidecar and
+            # regenerates the per-engine MasterVolume Lua mod.
+            if self.volume_offset_widget is not None and self.original_volume_offset is not None:
+                current_vol = int(self.volume_offset_widget.to_payload())
+                if current_vol != self.original_volume_offset:
+                    payload["volume_offset"] = current_vol
         if shop_changed:
             payload["shop"] = self.collect_shop_values()
         return payload
