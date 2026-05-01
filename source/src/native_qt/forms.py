@@ -153,6 +153,57 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
         outer.addWidget(self.add_condition_button, 0, QtCore.Qt.AlignmentFlag.AlignLeft)
 
     # ------------------------------------------------------------------
+    # Icon rendering — keep both glyphs font-independent so the
+    # delete X and the combo down-arrow always show, even on Windows
+    # builds where Qt sometimes can't find a fallback glyph for the
+    # multiplication sign or the BLACK DOWN-POINTING TRIANGLE.
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _render_remove_icon(size: int = 14) -> QtGui.QIcon:
+        """Vector-draw an X (two diagonal strokes) for the delete
+        button. No font dependency — always renders identically."""
+        pix = QtGui.QPixmap(size, size)
+        pix.fill(QtCore.Qt.GlobalColor.transparent)
+        p = QtGui.QPainter(pix)
+        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        pen = QtGui.QPen(QtGui.QColor(_TEXT))
+        pen.setWidthF(2.0)
+        pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        m = size * 0.25
+        p.drawLine(QtCore.QPointF(m, m),
+                   QtCore.QPointF(size - m, size - m))
+        p.drawLine(QtCore.QPointF(size - m, m),
+                   QtCore.QPointF(m, size - m))
+        p.end()
+        return QtGui.QIcon(pix)
+
+    @staticmethod
+    def _combo_dropdown_qss() -> str:
+        """QSS snippet that draws an explicit ▼ down-arrow using only
+        CSS borders (no image asset needed). Applied to the category
+        combos so the arrow is guaranteed visible regardless of the
+        host Qt style or any inherited stylesheet that may have
+        suppressed the default arrow."""
+        return (
+            "QComboBox::drop-down {"
+            "  subcontrol-origin: padding;"
+            "  subcontrol-position: top right;"
+            "  width: 22px;"
+            "  border-left: 1px solid " + _BORDER + ";"
+            "}"
+            "QComboBox::down-arrow {"
+            # Triangular arrow drawn via CSS borders
+            "  width: 0;"
+            "  height: 0;"
+            "  border-left: 5px solid transparent;"
+            "  border-right: 5px solid transparent;"
+            "  border-top: 6px solid " + _TEXT + ";"
+            "  margin-right: 6px;"
+            "}"
+        )
+
+    # ------------------------------------------------------------------
     # Row management
     # ------------------------------------------------------------------
     def _add_row(self, category_key: str = 'Driver', level: int = 1) -> None:
@@ -163,13 +214,15 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
 
         category_combo = QtWidgets.QComboBox()
         configure_field_control(category_combo, "editor")
+        # Explicit ▼ arrow so the dropdown indicator is always visible.
+        category_combo.setStyleSheet(self._combo_dropdown_qss())
         for label, key in CHARACTER_LEVEL_CHOICES:
             category_combo.addItem(label, key)
         for i in range(category_combo.count()):
             if category_combo.itemData(i) == category_key:
                 category_combo.setCurrentIndex(i)
                 break
-        category_combo.setMinimumWidth(120)
+        category_combo.setMinimumWidth(140)
         category_combo.currentIndexChanged.connect(self.changed.emit)
 
         level_label = QtWidgets.QLabel("Level")
@@ -181,9 +234,11 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
         level_input.setMaximumWidth(80)
         level_input.textChanged.connect(self.changed.emit)
 
-        remove_button = QtWidgets.QPushButton("×")  # multiplication sign
+        remove_button = QtWidgets.QPushButton()
+        remove_button.setIcon(self._render_remove_icon(14))
+        remove_button.setIconSize(QtCore.QSize(14, 14))
         remove_button.setToolTip("Remove this requirement")
-        remove_button.setFixedWidth(28)
+        remove_button.setFixedSize(28, 28)
         remove_button.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         remove_button.clicked.connect(lambda _checked=False, w=row_widget: self._remove_row(w))
 
@@ -198,12 +253,16 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
             'widget':   row_widget,
             'category': category_combo,
             'level':    level_input,
+            'remove':   remove_button,
         })
+        self._update_remove_button_visibility()
         self.changed.emit()
 
     def _remove_row(self, widget: QtWidgets.QWidget) -> None:
-        # Refuse to remove the very last row — keep at least one so the
-        # user can re-enable from "Unlock by default" without confusion.
+        # Refuse to remove the only remaining row — there must always
+        # be at least one editable row so the user can switch back from
+        # "Unlock by default" cleanly. The first row's remove button is
+        # hidden anyway, so this is mostly defence-in-depth.
         if len(self._rows) <= 1:
             return
         for i, row in enumerate(self._rows):
@@ -212,7 +271,17 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
                 row['widget'].deleteLater()
                 self._rows.pop(i)
                 break
+        self._update_remove_button_visibility()
         self.changed.emit()
+
+    def _update_remove_button_visibility(self) -> None:
+        """Hide the remove button on row 0 (the primary requirement
+        should always exist; if the user wants no requirements they
+        check 'Unlock by default'). All other rows show the button."""
+        for i, row in enumerate(self._rows):
+            btn = row.get('remove')
+            if btn is not None:
+                btn.setVisible(i > 0)
 
     # ------------------------------------------------------------------
     # Unlock-by-default toggle
