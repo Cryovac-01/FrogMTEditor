@@ -135,9 +135,18 @@ SHOP_BOUNDS: Dict[str, FieldBounds] = {
 # ── Engine creator's synthetic inputs (computed, then baked into the
 #    torque curve / DT row when the engine is generated) ──
 CREATOR_INPUT_BOUNDS: Dict[str, FieldBounds] = {
+    # Peak Torque RPM and Peak HP RPM are bounded by MaxRPM, which
+    # the editor caps at 14,000 hard / 10,000 typical. Their absolute
+    # bounds match the same ceiling so a user can't request a peak
+    # past the redline they're allowed to set. The cross-field
+    # validator (validate_rpm_curve below) handles the *relative*
+    # ratio check; these are the absolute floors and ceilings.
     'peak_torque_rpm': FieldBounds(
-        typical_min=1500, typical_max=12000,
-        hard_min=400, hard_max=30000,
+        # Heavy diesels can peak torque as low as ~1,100 rpm; that's
+        # the floor we want to allow without warning. Hard floor 400
+        # because anything quieter than that is implausible.
+        typical_min=1000, typical_max=12500,
+        hard_min=400, hard_max=14000,
         unit='rpm', kind='int',
     ),
     'max_hp': FieldBounds(
@@ -146,8 +155,12 @@ CREATOR_INPUT_BOUNDS: Dict[str, FieldBounds] = {
         unit='HP', kind='float',
     ),
     'peak_hp_rpm': FieldBounds(
-        typical_min=3000, typical_max=20000,
-        hard_min=400, hard_max=30000,
+        # Heavy diesels can peak HP near 2,200; sport bikes near
+        # 12,000. Typical floor 1,800 covers HD diesels; ceiling
+        # matches the MaxRPM hard cap so the user can't request a
+        # peak past redline.
+        typical_min=1800, typical_max=14000,
+        hard_min=600, hard_max=14000,
         unit='rpm', kind='int',
     ),
     # volume_offset is already constrained at the widget layer

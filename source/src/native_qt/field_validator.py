@@ -96,14 +96,18 @@ def _render(line_edit: QtWidgets.QLineEdit,
     and stash the result on the widget for later querying."""
     line_edit.setProperty(_RESULT_KEY, _result_to_dict(result))
 
-    # Border colour: keep the existing stylesheet and append the status
-    # override so we don't clobber theme rules. The simplest correct
-    # approach is to re-apply the full sheet on every status change —
-    # Qt is fine with that.
+    # Border colour: keep the original stylesheet and append the
+    # status override so we don't clobber theme rules. We track
+    # whether we've already captured the original via a sentinel
+    # property — checking the captured *value* with `if not base`
+    # has a subtle bug: when the widget started with an empty
+    # stylesheet, the check fires every render, and once we've
+    # applied an override the recapture pulls in the override as
+    # the new "base", baking the warn/error border in permanently.
+    if not line_edit.property('baseStyleSheetCaptured'):
+        line_edit.setProperty('baseStyleSheet', line_edit.styleSheet())
+        line_edit.setProperty('baseStyleSheetCaptured', True)
     base = line_edit.property('baseStyleSheet') or ''
-    if not base:
-        base = line_edit.styleSheet()
-        line_edit.setProperty('baseStyleSheet', base)
     override = _BORDER_STYLES.get(result.status, '')
     line_edit.setStyleSheet(base + ('\n' + override if override else ''))
 

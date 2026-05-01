@@ -1296,12 +1296,13 @@ class PartEditorForm(QtWidgets.QWidget):
         order = {'ok': 0, 'warn': 1, 'error': 2}
         worst = max((per_field_status, result.status), key=lambda s: order.get(s, 0))
 
-        # Re-render with the worst status. Reuse the validator's style
-        # constants so the colour palette stays in sync.
+        # Capture the base stylesheet exactly once via a sentinel
+        # property — see the matching note in field_validator._render
+        # for why a falsy check on the value is wrong.
+        if not widget.property('baseStyleSheetCaptured'):
+            widget.setProperty('baseStyleSheet', widget.styleSheet())
+            widget.setProperty('baseStyleSheetCaptured', True)
         base = widget.property('baseStyleSheet') or ''
-        if not base:
-            base = widget.styleSheet()
-            widget.setProperty('baseStyleSheet', base)
         override = _fv._BORDER_STYLES.get(worst, '')
         widget.setStyleSheet(base + ('\n' + override if override else ''))
 
