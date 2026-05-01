@@ -4579,6 +4579,21 @@ def create_engine(data: Dict) -> Dict:
             except Exception:
                 pass  # Non-critical; fork will fall back to empty fields
 
+            # Regenerate the per-engine MasterVolume Lua mod whenever an
+            # engine is saved. Scans every .creation.json in the engine
+            # workspace, so an edit to engine A picks up the latest
+            # offset for engine B too. Failures here are deliberately
+            # non-fatal — the engine asset/DT row is the user's primary
+            # output; the audio sidecar mod is a nice-to-have.
+            try:
+                from lua_mods import engine_volume as _engine_volume
+                _engine_volume.deploy_from_engine_workspace(engine_dir)
+            except Exception as _vol_exc:
+                logger.info(
+                    "Engine volume Lua mod regenerate failed for '%s': %s",
+                    new_name, _vol_exc,
+                )
+
             if os.path.isfile(dt_uasset_path) and os.path.isfile(dt_uexp_path):
                 dt_uasset_bak = dt_uasset_path + '.bak'
                 dt_uexp_bak = dt_uexp_path + '.bak'

@@ -125,6 +125,7 @@ def _ensure_loaded() -> None:
     from . import population_boost              # noqa: F401
     from . import skip_night                    # noqa: F401
     from . import slow_decay                    # noqa: F401
+    from . import engine_volume                 # noqa: F401
 
 
 # Shared default output directory. Mirrors what cargo_scaling_deployer used
