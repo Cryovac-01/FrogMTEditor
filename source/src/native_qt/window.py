@@ -155,6 +155,36 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         top_layout.addWidget(top_actions_widget, 0, QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
         root.addWidget(topbar)
 
+        # Persistent compatibility notice. Engines, tires, and other
+        # parts created in older Frog Mod Editor releases used a
+        # different sidecar format and binary layout — opening or
+        # forking them in this build can produce incomplete payloads,
+        # missing volume/level metadata, and (worst case) corrupted
+        # DataTable rows. Until a proper migration tool exists (#7),
+        # we surface this as a visible warning above the workspace
+        # so users don't silently lose data.
+        self.compat_notice = QtWidgets.QLabel(
+            "  ⚠  This build is NOT compatible with engines or tires "
+            "created in earlier Frog Mod Editor versions. Re-create them "
+            "in this version before saving — opening or forking older "
+            "parts may produce incomplete or corrupted output."
+        )
+        self.compat_notice.setWordWrap(True)
+        self.compat_notice.setStyleSheet(
+            "QLabel {"
+            "  background-color: #3a2a18;"   # warm warning brown
+            "  color: #f5c98e;"              # soft amber text
+            "  border-bottom: 1px solid #5a3a1a;"
+            "  padding: 8px 14px;"
+            "  font-size: 12px;"
+            "  font-weight: 500;"
+            "}"
+        )
+        self.compat_notice.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
+        root.addWidget(self.compat_notice)
+
         self.live_banner = QtWidgets.QLabel("")
         self.live_banner.setWordWrap(True)
         set_label_kind(self.live_banner, "warning")
