@@ -1467,12 +1467,36 @@ def _register_engine_datatable_entry(ua: bytes, ue: bytes, engine_name: str,
                                      variant: str, update_existing: bool = True,
                                      description: str = '',
                                      row_tail_variant: Optional[str] = None,
-                                     tail_donor_name: Optional[str] = None) -> tuple[bytes, bytes, str]:
-    """Ensure an engine has a matching DataTable row and imports."""
-    from parsers.uasset_engines_dt import get_fname_index, add_row_key, add_engine_import
+                                     tail_donor_name: Optional[str] = None,
+                                     level_requirements: Optional[Dict[str, int]] = None
+                                     ) -> tuple[bytes, bytes, str]:
+    """Ensure an engine has a matching DataTable row and imports.
+
+    When ``level_requirements`` is provided (as a dict mapping
+    CL_* enum name -> int level), the donor's LevelRequirementToBuy
+    TMap inside the row tail is rewritten to match the user's pick.
+    Empty dict -> count=0 (engine unlocks at Driver level 1, vanilla
+    default). Missing CL_* names are appended to the .uasset name
+    table on the fly. Donors whose existing TMap is empty cannot be
+    located by the offset scanner — in that case the rewrite is
+    skipped and the donor's level requirement (if any) is inherited.
+    """
+    from parsers.uasset_engines_dt import (
+        get_fname_index, add_row_key, add_engine_import,
+        append_names_if_missing,
+    )
     from parsers.uexp_engines_dt import (read_row as read_dt_row,
                                           update_row as update_dt_row,
-                                          append_row, build_row_from_template)
+                                          append_row, build_row_from_template,
+                                          build_level_requirement_bytes,
+                                          replace_level_requirement_section)
+
+    # CL_* names spanning EMTCharacterLevelType enum (Driver, Taxi, Bus,
+    # Truck, Racer, Wrecker, Police). The locator needs to know every
+    # CL_* index that might appear in a donor's existing TMap, even if
+    # the user isn't selecting all of them.
+    _CL_NAMES = ('CL_Driver', 'CL_Taxi', 'CL_Bus', 'CL_Truck',
+                 'CL_Racer', 'CL_Wrecker', 'CL_Police')
 
     fname_idx = get_fname_index(ua, engine_name)
     path_idx = get_fname_index(ua, f'/Game/Cars/Parts/Engine/{engine_name}')
@@ -1512,6 +1536,38 @@ def _register_engine_datatable_entry(ua: bytes, ue: bytes, engine_name: str,
     )
     if not replaced:
         raise ValueError(f'Could not patch donor import ref for {engine_name}')
+
+    # Apply the user's level requirements (if provided) before building
+    # the row. Adds any missing CL_* enum FNames to the .uasset name
+    # table first so the FName indices we encode are valid.
+    if level_requirements is not None:
+        # Make sure every CL_* enum name we might need (including ones
+        # in the donor's existing TMap) is present in the .uasset name
+        # table. Cheap to just request all 7 — append_names_if_missing
+        # is a no-op for names that already exist.
+        ua, cl_indices = append_names_if_missing(ua, list(_CL_NAMES))
+        # Verify all keys the user picked have valid FNames. They will
+        # because we just added them, but defend against typos.
+        missing = [k for k in level_requirements if k not in cl_indices]
+        if missing:
+            raise ValueError(f'Unknown CL_* level types in level_requirements: {missing}')
+        new_lr_bytes = build_level_requirement_bytes(level_requirements, cl_indices)
+        rewritten_tail, did_rewrite = replace_level_requirement_section(
+            patched_tail, new_lr_bytes, cl_indices
+        )
+        if did_rewrite:
+            patched_tail = rewritten_tail
+        else:
+            # Donor had empty LevelRequirementToBuy and locator couldn't
+            # anchor a position. Falling back to donor's value (which is
+            # also empty -> "unlocked by default"). Worth surfacing so a
+            # future change can implement the field-walk approach.
+            logger.info(
+                "level_requirements ignored for engine '%s': donor row "
+                "had no existing LevelRequirementToBuy entry to anchor "
+                "the rewrite. Falling back to donor's empty TMap.",
+                engine_name,
+            )
 
     new_row = build_row_from_template(
         fname_idx, display_name, price, weight, patched_tail, donor_row, description=description
@@ -4476,12 +4532,14 @@ def create_engine(data: Dict) -> Dict:
             _fuel_type = str(data.get('fuel_type') or '').strip()
             # level_requirements_json arrives as a JSON-encoded string
             # like '{"Driver": 5, "Truck": 3}' (or '{}' for unlock-by-
-            # default). Decode for sidecar storage so fork populates
-            # the widget cleanly. NOTE Phase 1: we do NOT yet write
-            # this back into the engine row binary — that requires
-            # tail-rewriting in the Engines DataTable parser, queued
-            # as a separate change. For now the engine ships with the
-            # donor's existing level requirements in-game.
+            # default). Decoded here for two purposes:
+            #   1) saved to the .creation.json sidecar so fork
+            #      populates the widget cleanly on re-edit.
+            #   2) passed to _register_engine_datatable_entry() so
+            #      LevelRequirementToBuy in the Engines DataTable row
+            #      tail is rewritten to match the user's selection
+            #      (Phase 2). Donors with empty TMaps fall back to
+            #      donor's value — see helper docstring.
             _level_requirements: Dict[str, int] = {}
             _lr_raw = str(data.get('level_requirements_json') or '').strip()
             if _lr_raw:
@@ -4519,6 +4577,7 @@ def create_engine(data: Dict) -> Dict:
                     uasset_bytes, uexp_bytes, new_name, display_name, price, weight, variant,
                     update_existing=True, description=description,
                     tail_donor_name=vehicle_type,
+                    level_requirements=_level_requirements,
                 )
                 new_uasset_dt = _patch_datatable_serial_size(new_uasset_dt, len(new_uexp_dt))
 

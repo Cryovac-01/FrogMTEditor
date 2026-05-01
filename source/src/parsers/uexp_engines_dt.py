@@ -463,6 +463,115 @@ def patch_row_price_weight(data: bytes, fname_idx: int,
     raise KeyError(f'No Engines DataTable row with fname_idx={fname_idx}')
 
 
+def find_level_requirement_section(tail: bytes, cl_name_indices: dict) -> tuple:
+    """Locate the LevelRequirementToBuy TMap bytes inside a row tail.
+
+    The Engines DataTable rows use UNTAGGED USTRUCT serialization
+    (the property names like 'MapProperty' aren't in the .uasset name
+    table). LevelRequirementToBuy is field 20 on FVehiclePartRow and
+    serialises as: ``[NumElements: int32] [Key + Value]*``
+    where each Key is an 8-byte FName (TEnumAsByte<EMTCharacterLevelType>
+    serialised as named enum) and each Value is an int32 level.
+
+    Strategy: scan for the first 8-byte sequence whose first int32 is
+    a known CL_* FName index AND whose suffix int32 is 0 (FName number).
+    That FName is the FIRST entry's key. The 4 bytes immediately before
+    are the NumElements count. Walk forward NumElements * 12 bytes to
+    find the section end.
+
+    Limitation: only handles donors that have at least ONE existing
+    LevelRequirementToBuy entry. For empty-TMap donors (Bikes,
+    Electric_*, Bus_140HP, etc.) we'd need to walk all preceding
+    fixed-layout fields to find the count int32 — deferred for now.
+
+    Args:
+        tail: Row tail bytes (from row['tail_start'] to row_end).
+        cl_name_indices: Dict mapping CL_* FName text -> FName index.
+            Pass the indices for any CL_* names present in the
+            donor's .uasset (look them up via get_fname_index).
+
+    Returns:
+        (start_offset, end_offset) of the count+entries bytes, or
+        None if no existing TMap could be located.
+    """
+    cl_idx_set = set(cl_name_indices.values())
+    if not cl_idx_set:
+        return None
+    # Scan for the first occurrence of any known CL_* FName in (idx, 0)
+    # form. Step by 4 bytes since FNames are 4-byte-aligned within the
+    # serialised TMap layout.
+    for off in range(0, len(tail) - 12, 4):
+        idx_val = struct.unpack_from('<i', tail, off)[0]
+        num_val = struct.unpack_from('<i', tail, off + 4)[0]
+        if idx_val in cl_idx_set and num_val == 0:
+            count_off = off - 4
+            if count_off < 0:
+                return None
+            count = struct.unpack_from('<i', tail, count_off)[0]
+            if count < 1 or count > 64:
+                # Sanity cap: a TMap with > 64 character-level entries
+                # is almost certainly a coincidental byte pattern, not
+                # a real LevelRequirementToBuy.
+                continue
+            end_off = count_off + 4 + count * 12
+            if end_off > len(tail):
+                continue
+            # Verify every entry has a CL_* key. Helps filter false
+            # positives where a non-level field happens to encode a
+            # value coinciding with a CL_* index.
+            ok = True
+            for i in range(count):
+                e_off = count_off + 4 + i * 12
+                e_idx = struct.unpack_from('<i', tail, e_off)[0]
+                e_num = struct.unpack_from('<i', tail, e_off + 4)[0]
+                if e_idx not in cl_idx_set or e_num != 0:
+                    ok = False
+                    break
+            if ok:
+                return (count_off, end_off)
+    return None
+
+
+def build_level_requirement_bytes(requirements: dict, cl_name_indices: dict) -> bytes:
+    """Build the binary representation of LevelRequirementToBuy.
+
+    Args:
+        requirements: dict mapping CL_* name (e.g. 'CL_Driver') to
+            int level value. Empty dict -> count=0 (no requirements).
+        cl_name_indices: dict mapping CL_* name to FName index in the
+            target .uasset. Every key in requirements MUST be present.
+
+    Returns:
+        Serialised TMap bytes: [count: int32] [(FName key + int32 level)] *
+    """
+    out = bytearray()
+    out += struct.pack('<i', len(requirements))
+    for cl_name, level in requirements.items():
+        idx = cl_name_indices[cl_name]
+        out += struct.pack('<ii', idx, 0)        # FName: idx + number
+        out += struct.pack('<i', int(level))     # int32 level value
+    return bytes(out)
+
+
+def replace_level_requirement_section(tail: bytes,
+                                       new_section: bytes,
+                                       cl_name_indices: dict) -> tuple:
+    """Splice ``new_section`` over the existing LevelRequirementToBuy
+    bytes in ``tail``.
+
+    Returns:
+        (new_tail, replaced_bool). ``replaced_bool`` is True when the
+        section was located and rewritten; False when no existing
+        LevelRequirementToBuy was found (donor's TMap was empty) and
+        the tail is returned unchanged.
+    """
+    section = find_level_requirement_section(tail, cl_name_indices)
+    if section is None:
+        return tail, False
+    start, end = section
+    return tail[:start] + new_section + tail[end:], True
+
+
 def append_row(data: bytes, row_bytes: bytes) -> bytes:
     """Append a row to the DataTable binary.
 

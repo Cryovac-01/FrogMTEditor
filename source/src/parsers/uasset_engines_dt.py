@@ -153,6 +153,110 @@ def add_row_key(uasset_data: bytes, row_key: str) -> tuple:
     return bytes(result), new_fname_index, path_fname_index
 
 
+def append_names_if_missing(uasset_data: bytes, names: list) -> tuple:
+    """Append each given name to the FName table if not already present.
+
+    Used by the Engine Unlock Requirements writer to make sure
+    EMTCharacterLevelType enum names (CL_Driver, CL_Bus, ...) the
+    user picked are referenceable from the Engines.uexp row tail.
+    Mirrors the offset-bumping pattern of add_row_key but allows
+    appending an arbitrary list of plain names (no /Game/... full
+    paths).
+
+    Args:
+        uasset_data: Raw Engines.uasset bytes.
+        names:       List of plain names to ensure present.
+
+    Returns:
+        (updated_uasset_bytes, name_to_fname_index_map) where the map
+        contains an entry for each input name (existing or newly added).
+    """
+    data = uasset_data
+
+    # Resolve which names are missing
+    existing_idx = {n: get_fname_index(data, n) for n in names}
+    missing = [n for n, i in existing_idx.items() if i < 0]
+    if not missing:
+        return data, {n: existing_idx[n] for n in names}
+
+    # ── Parse header (same as add_row_key) ──
+    fixed_header = data[:28]
+    old_total_size = struct.unpack_from('<i', data, 28)[0]
+    _folder_text, folder_bytes = _read_fstring(data, 32)
+    folder_end = 32 + folder_bytes
+    name_count = struct.unpack_from('<i', data, folder_end + 4)[0]
+    name_offset = struct.unpack_from('<i', data, folder_end + 8)[0]
+    header_fields = bytearray(data[folder_end: name_offset])
+    name_entries, name_table_size = _parse_name_table(data, name_offset, name_count)
+    rest_start = name_offset + name_table_size
+    rest_data = data[rest_start:]
+
+    # ── Build new name table: existing + each missing name ──
+    new_indices = {}
+    new_name_table = b''
+    for entry in name_entries:
+        new_name_table += _build_name_entry(entry['text'], entry['hash'])
+    for n in missing:
+        new_indices[n] = name_count + len(new_indices)
+        new_name_table += _build_name_entry(n, _cityhash_lite(n))
+
+    name_table_delta = len(new_name_table) - name_table_size
+    added = len(missing)
+
+    # Bump NameCount and offsets that point past the name table
+    struct.pack_into('<i', header_fields, 4, name_count + added)
+    old_serial_size = 0
+    eo_tmp = struct.unpack_from('<i', header_fields, 32)[0]
+    if eo_tmp > 0 and eo_tmp < len(data):
+        old_serial_size = struct.unpack_from('<q', data, eo_tmp + 28)[0]
+    upper_bound = old_total_size + max(old_serial_size, 0)
+    for byte_off in range(0, len(header_fields) - 3, 4):
+        val = struct.unpack_from('<i', header_fields, byte_off)[0]
+        if rest_start <= val <= upper_bound:
+            struct.pack_into('<i', header_fields, byte_off, val + name_table_delta)
+
+    # GenerationNameCount mirror
+    gen_off = 22 * 4
+    if gen_off + 4 <= len(header_fields):
+        old_gen = struct.unpack_from('<i', header_fields, gen_off)[0]
+        if old_gen == name_count:
+            struct.pack_into('<i', header_fields, gen_off, name_count + added)
+
+    new_total_size = old_total_size + name_table_delta
+
+    # Patch SerialOffset in export entries (same as add_row_key)
+    orig_export_count = struct.unpack_from('<i', header_fields, 28)[0]
+    orig_export_offset = struct.unpack_from('<i', data, folder_end + 32)[0]
+    orig_depends_offset = struct.unpack_from('<i', data, folder_end + 44)[0]
+    if name_table_delta != 0 and orig_export_count > 0 and orig_export_offset > 0:
+        rest_data = bytearray(rest_data)
+        if orig_depends_offset > orig_export_offset and orig_export_count > 0:
+            entry_size = (orig_depends_offset - orig_export_offset) // orig_export_count
+        else:
+            entry_size = 96
+        for i in range(orig_export_count):
+            serial_off_pos = (orig_export_offset - rest_start) + i * entry_size + 36
+            if 0 <= serial_off_pos and serial_off_pos + 8 <= len(rest_data):
+                old_serial = struct.unpack_from('<q', rest_data, serial_off_pos)[0]
+                struct.pack_into('<q', rest_data, serial_off_pos, old_serial + name_table_delta)
+        rest_data = bytes(rest_data)
+
+    # ── Assemble ──
+    result = bytearray()
+    result += fixed_header
+    result += struct.pack('<i', new_total_size)
+    result += data[32: 32 + folder_bytes]
+    result += header_fields
+    result += new_name_table
+    result += rest_data
+    new_data = bytes(result)
+
+    # Combine new + existing indices
+    out_map = {n: existing_idx[n] for n in names if existing_idx[n] >= 0}
+    out_map.update(new_indices)
+    return new_data, out_map
+
+
 def add_engine_import(uasset_data: bytes, engine_name: str,
                       path_fname_idx: int, name_fname_idx: int) -> bytes:
     """Add Package + MHEngineDataAsset import entries for a new engine.
