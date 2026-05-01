@@ -43,15 +43,20 @@ EV_ONLY_ENGINE_PROPERTIES = (
 )
 
 # Engine property keys that only make sense on combustion engines
-# (starter motor, idle throttle, rev-match blips, jake brake, etc.).
-# Hidden when Fuel Type = Electric since EVs have no concept of any
-# of these. Visible for Gas / Diesel.
+# (starter motor, idle throttle, rev-match blips). Visible for Gas
+# AND Diesel; hidden when Fuel Type = Electric.
 ICE_ONLY_ENGINE_PROPERTIES = (
     "StarterTorque",
     "StarterRPM",
     "IdleThrottle",
     "BlipThrottle",
     "BlipDurationSeconds",
+)
+
+# Engine property keys that only make sense on diesel engines
+# (heavy-duty airflow efficiency, jake-brake / engine brake).
+# Visible only when Fuel Type = Diesel; hidden for Gas / Electric.
+DIESEL_ONLY_ENGINE_PROPERTIES = (
     "IntakeSpeedEfficiency",
     "MaxJakeBrakeStep",
 )
@@ -329,14 +334,19 @@ class PartEditorForm(QtWidgets.QWidget):
 
     def _apply_fuel_type_visibility(self) -> None:
         """Toggle the rows that depend on Fuel Type:
-          - EV-only properties visible only when Electric.
-          - ICE-only properties (starter, idle, blip, jake brake,
-            intake efficiency) visible only when Gas or Diesel.
+          - EV-only props (regen, motor power/voltage):  visible only
+            when Electric.
+          - ICE-only props (starter, idle, blip throttle):  visible
+            only when Gas OR Diesel (anything that combusts).
+          - Diesel-only props (intake efficiency, jake brake):  visible
+            only when Diesel.
         Safe to call before or after the property rows have been
         built — missing keys are simply skipped."""
         if self.fuel_type_combo is None:
             return
-        is_electric = (self.fuel_type_combo.currentData() == 'electric')
+        fuel = str(self.fuel_type_combo.currentData() or '')
+        is_electric = (fuel == 'electric')
+        is_diesel   = (fuel == 'diesel')
         for prop_key in EV_ONLY_ENGINE_PROPERTIES:
             wrapper = self.property_row_widgets.get(prop_key)
             if wrapper is not None:
@@ -345,6 +355,10 @@ class PartEditorForm(QtWidgets.QWidget):
             wrapper = self.property_row_widgets.get(prop_key)
             if wrapper is not None:
                 wrapper.setVisible(not is_electric)
+        for prop_key in DIESEL_ONLY_ENGINE_PROPERTIES:
+            wrapper = self.property_row_widgets.get(prop_key)
+            if wrapper is not None:
+                wrapper.setVisible(is_diesel)
 
     def _handle_fuel_type_change(self) -> None:
         """Called when the Fuel Type combo's selection changes. If the
