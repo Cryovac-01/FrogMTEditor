@@ -4474,6 +4474,27 @@ def create_engine(data: Dict) -> Dict:
             import json as _json
             _creation_meta_path = os.path.join(engine_dir, new_name + '.creation.json')
             _fuel_type = str(data.get('fuel_type') or '').strip()
+            # level_requirements_json arrives as a JSON-encoded string
+            # like '{"Driver": 5, "Truck": 3}' (or '{}' for unlock-by-
+            # default). Decode for sidecar storage so fork populates
+            # the widget cleanly. NOTE Phase 1: we do NOT yet write
+            # this back into the engine row binary — that requires
+            # tail-rewriting in the Engines DataTable parser, queued
+            # as a separate change. For now the engine ships with the
+            # donor's existing level requirements in-game.
+            _level_requirements: Dict[str, int] = {}
+            _lr_raw = str(data.get('level_requirements_json') or '').strip()
+            if _lr_raw:
+                try:
+                    decoded = _json.loads(_lr_raw)
+                    if isinstance(decoded, dict):
+                        for k, v in decoded.items():
+                            try:
+                                _level_requirements[str(k)] = max(1, int(v))
+                            except (TypeError, ValueError):
+                                pass
+                except Exception:
+                    pass
             try:
                 _json.dump({
                     'peak_torque_rpm': peak_torque_rpm,
@@ -4481,6 +4502,7 @@ def create_engine(data: Dict) -> Dict:
                     'peak_hp_rpm': peak_hp_rpm,
                     'vehicle_type': vehicle_type or '',
                     'fuel_type': _fuel_type,
+                    'level_requirements': _level_requirements,
                 }, open(_creation_meta_path, 'w'))
             except Exception:
                 pass  # Non-critical; fork will fall back to empty fields

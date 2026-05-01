@@ -70,6 +70,21 @@ FUEL_TYPE_TO_ENUM = {
     'electric': 3,
 }
 
+# Character-level categories used by Engine Unlock Requirements.
+# Internal keys match MT's EMTCharacterLevelType enum names so the
+# server can map straight to the underlying integer (CL_Driver=0,
+# CL_Taxi=1, CL_Bus=2, CL_Truck=3, CL_Racer=4, CL_Wrecker=5,
+# CL_Police=6).
+CHARACTER_LEVEL_CHOICES = [
+    ('Driver',  'Driver'),
+    ('Taxi',    'Taxi'),
+    ('Bus',     'Bus'),
+    ('Truck',   'Truck'),
+    ('Racer',   'Racer'),
+    ('Tow',     'Wrecker'),
+    ('Police',  'Police'),
+]
+
 # Tire vehicle type choices.
 # Each entry: (display_label, donor_row_name in VehicleParts0).
 # The donor_row_name determines which vehicles can equip the tire.
@@ -86,6 +101,175 @@ TIRE_VEHICLE_TYPE_CHOICES = [
     ('Heavy Machine (Front)', 'HeavyMachineFrontTire'),
     ('Heavy Machine (Rear)', 'HeavyMachineRearTire'),
 ]
+
+class LevelRequirementsWidget(QtWidgets.QWidget):
+    """Compact UI for the engine's LevelRequirementToBuy TMap.
+
+    Layout:
+      [ ] Unlock by default
+          (checkbox; when checked, hides + ignores the rows below.
+           Engine ships with NO level requirements -> unlocked at
+           Driver level 1 by vanilla MT default.)
+      [ Category ▼ ]  Level [ N ]  [ × ]
+      [ Category ▼ ]  Level [ N ]  [ × ]
+      [ + Add condition ]
+
+    Emits `changed` whenever any visible state mutates so the parent
+    PartEditorForm can mark itself dirty. Round-trips through
+    to_payload() / from_payload() for sidecar persistence.
+    """
+    changed = QtCore.Signal()
+
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
+        super().__init__(parent)
+        self._rows: List[Dict[str, QtWidgets.QWidget]] = []
+
+        outer = QtWidgets.QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(8)
+
+        self.unlock_default_checkbox = QtWidgets.QCheckBox("Unlock by default")
+        self.unlock_default_checkbox.setToolTip(
+            "When checked, the engine has no level requirements and is "
+            "available to the player from Driver level 1."
+        )
+        self.unlock_default_checkbox.toggled.connect(self._on_unlock_toggled)
+        outer.addWidget(self.unlock_default_checkbox)
+
+        # Container for the per-condition rows. Nested in a frame so
+        # the show/hide behaviour also tucks any spacing nicely.
+        self._rows_container = QtWidgets.QWidget()
+        self._rows_layout = QtWidgets.QVBoxLayout(self._rows_container)
+        self._rows_layout.setContentsMargins(0, 0, 0, 0)
+        self._rows_layout.setSpacing(6)
+        outer.addWidget(self._rows_container)
+
+        self.add_condition_button = QtWidgets.QPushButton("+ Add condition")
+        self.add_condition_button.setToolTip(
+            "Add another (Category, Level) requirement. Engine unlocks "
+            "only when ALL listed requirements are met."
+        )
+        self.add_condition_button.clicked.connect(lambda: self._add_row())
+        outer.addWidget(self.add_condition_button, 0, QtCore.Qt.AlignmentFlag.AlignLeft)
+
+    # ------------------------------------------------------------------
+    # Row management
+    # ------------------------------------------------------------------
+    def _add_row(self, category_key: str = 'Driver', level: int = 1) -> None:
+        row_widget = QtWidgets.QWidget()
+        row_h = QtWidgets.QHBoxLayout(row_widget)
+        row_h.setContentsMargins(0, 0, 0, 0)
+        row_h.setSpacing(8)
+
+        category_combo = QtWidgets.QComboBox()
+        configure_field_control(category_combo, "editor")
+        for label, key in CHARACTER_LEVEL_CHOICES:
+            category_combo.addItem(label, key)
+        for i in range(category_combo.count()):
+            if category_combo.itemData(i) == category_key:
+                category_combo.setCurrentIndex(i)
+                break
+        category_combo.setMinimumWidth(120)
+        category_combo.currentIndexChanged.connect(self.changed.emit)
+
+        level_label = QtWidgets.QLabel("Level")
+        set_label_kind(level_label, "subtle")
+
+        level_input = QtWidgets.QLineEdit(str(int(level)))
+        configure_field_control(level_input, "editor")
+        level_input.setValidator(QtGui.QIntValidator(1, 999, self))
+        level_input.setMaximumWidth(80)
+        level_input.textChanged.connect(self.changed.emit)
+
+        remove_button = QtWidgets.QPushButton("×")  # multiplication sign
+        remove_button.setToolTip("Remove this requirement")
+        remove_button.setFixedWidth(28)
+        remove_button.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        remove_button.clicked.connect(lambda _checked=False, w=row_widget: self._remove_row(w))
+
+        row_h.addWidget(category_combo, 0)
+        row_h.addWidget(level_label, 0)
+        row_h.addWidget(level_input, 0)
+        row_h.addWidget(remove_button, 0)
+        row_h.addStretch(1)
+
+        self._rows_layout.addWidget(row_widget)
+        self._rows.append({
+            'widget':   row_widget,
+            'category': category_combo,
+            'level':    level_input,
+        })
+        self.changed.emit()
+
+    def _remove_row(self, widget: QtWidgets.QWidget) -> None:
+        # Refuse to remove the very last row — keep at least one so the
+        # user can re-enable from "Unlock by default" without confusion.
+        if len(self._rows) <= 1:
+            return
+        for i, row in enumerate(self._rows):
+            if row['widget'] is widget:
+                row['widget'].setParent(None)
+                row['widget'].deleteLater()
+                self._rows.pop(i)
+                break
+        self.changed.emit()
+
+    # ------------------------------------------------------------------
+    # Unlock-by-default toggle
+    # ------------------------------------------------------------------
+    def _on_unlock_toggled(self, checked: bool) -> None:
+        # When unlock-by-default is on, the user can't edit the rows.
+        # Hide the container + add button entirely so there's no
+        # ambiguity about what's active.
+        self._rows_container.setVisible(not checked)
+        self.add_condition_button.setVisible(not checked)
+        self.changed.emit()
+
+    # ------------------------------------------------------------------
+    # Public payload + restore API
+    # ------------------------------------------------------------------
+    def to_payload(self) -> Dict[str, int]:
+        """Return {category_key: level} for every active requirement,
+        or empty dict if 'Unlock by default' is checked."""
+        if self.unlock_default_checkbox.isChecked():
+            return {}
+        out: Dict[str, int] = {}
+        for row in self._rows:
+            key = str(row['category'].currentData() or '')
+            try:
+                level = int(row['level'].text().strip() or '1')
+            except ValueError:
+                level = 1
+            if key and level >= 1:
+                # Last write wins if the user picks the same category
+                # twice — the underlying TMap can't hold duplicate keys.
+                out[key] = level
+        return out
+
+    def from_payload(self, payload: Optional[Dict[str, int]]) -> None:
+        """Restore widget state from a saved payload (typically from
+        creation_inputs.level_requirements)."""
+        # Clear any existing rows
+        for row in self._rows:
+            row['widget'].setParent(None)
+            row['widget'].deleteLater()
+        self._rows = []
+
+        if payload is None or not payload:
+            # No saved data OR explicitly empty -> default to unlocked
+            self.unlock_default_checkbox.setChecked(True)
+            # Still seed one (hidden) row so the user can untick and edit
+            self._add_row('Driver', 1)
+            return
+
+        self.unlock_default_checkbox.setChecked(False)
+        for category_key, level in payload.items():
+            try:
+                level_int = int(level)
+            except (TypeError, ValueError):
+                level_int = 1
+            self._add_row(str(category_key), max(1, level_int))
+
 
 class PartEditorForm(QtWidgets.QWidget):
     changed = QtCore.Signal()
@@ -126,6 +310,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.peak_hp_rpm_input: Optional[QtWidgets.QLineEdit] = None
         self.vehicle_type_combo: Optional[QtWidgets.QComboBox] = None
         self.fuel_type_combo: Optional[QtWidgets.QComboBox] = None
+        self.level_requirements_widget: Optional[LevelRequirementsWidget] = None
         # Row-wrapper widgets keyed by property name. Used to hide /
         # show whole rows (label + input + helper text) dynamically
         # in response to the Fuel Type combo, e.g. EV-only properties
@@ -187,6 +372,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.peak_hp_rpm_input = None
         self.vehicle_type_combo = None
         self.fuel_type_combo = None
+        self.level_requirements_widget = None
         self.property_row_widgets = {}
         self._previous_fuel_type = ""
         self._suppress_fuel_handler = False
@@ -296,6 +482,19 @@ class PartEditorForm(QtWidgets.QWidget):
         self.vehicle_type_combo = combo
         self.shop_widgets["vehicle_type"] = combo
         self.shop_kinds["vehicle_type"] = "combo_data"
+
+    def _add_level_requirements_entry(self, form: QtWidgets.QFormLayout,
+                                       saved: Optional[Dict[str, int]] = None) -> None:
+        """Add the Engine Unlock Requirements section to the engine
+        creator form. The widget exposes a checkbox for "unlock by
+        default" plus a dynamic list of (Category, Level) pairs."""
+        label = QtWidgets.QLabel("Engine Unlock Requirements")
+        set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
+        widget = LevelRequirementsWidget(self)
+        widget.from_payload(saved or None)
+        widget.changed.connect(self.changed.emit)
+        form.addRow(label, widget)
+        self.level_requirements_widget = widget
 
     def _add_fuel_type_entry(self, form: QtWidgets.QFormLayout,
                              current_value: str = '',
@@ -668,6 +867,10 @@ class PartEditorForm(QtWidgets.QWidget):
                     current_value=creation_inputs.get('fuel_type', ''),
                     default_is_ev=bool(metadata.get('is_ev')),
                 )
+                self._add_level_requirements_entry(
+                    form,
+                    saved=creation_inputs.get('level_requirements'),
+                )
         elif self.part_type == "tire":
             self._add_shop_entry(form, "display_name", "Display Name", shop.get("display_name") or part.get("name") or "")
             self._add_shop_entry(form, "code", "Code", shop.get("code") or "")
@@ -793,10 +996,21 @@ class PartEditorForm(QtWidgets.QWidget):
             enum_value = FUEL_TYPE_TO_ENUM.get(fuel_key)
             if enum_value is not None:
                 payload['FuelType'] = str(enum_value)
+        if self.level_requirements_widget is not None:
+            # Serialise as JSON string so it round-trips through the
+            # property dict (which expects str values) without losing
+            # the dict structure. Server side decodes it back.
+            import json as _json
+            payload['_level_requirements'] = _json.dumps(
+                self.level_requirements_widget.to_payload()
+            )
         # Strip thousands-separator commas from every value so users
         # can write "12,000" naturally and the server parses it fine.
-        payload = {k: v.replace(',', '') if isinstance(v, str) else v
-                   for k, v in payload.items()}
+        # Skip _level_requirements: it's JSON, commas are syntax there.
+        payload = {
+            k: (v.replace(',', '') if (isinstance(v, str) and k != '_level_requirements') else v)
+            for k, v in payload.items()
+        }
         return payload
 
     def get_current_property_strings(self) -> Dict[str, str]:

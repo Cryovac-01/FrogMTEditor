@@ -787,6 +787,7 @@ class CreatorWorkspace(QtWidgets.QWidget):
             props = self.form.collect_property_payload_for_create()
             vehicle_type = props.pop('_vehicle_type', '')
             fuel_type = props.pop('_fuel_type', '')
+            level_requirements_json = props.pop('_level_requirements', '')
             payload = {
                 "template": template_name,
                 "name": name,
@@ -799,6 +800,7 @@ class CreatorWorkspace(QtWidgets.QWidget):
                 "expected_version": expected_version,
                 "vehicle_type": vehicle_type,
                 "fuel_type": fuel_type,
+                "level_requirements_json": level_requirements_json,
             }
 
             def on_done(result: Optional[Dict[str, Any]], error: Optional[Exception]) -> None:
