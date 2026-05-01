@@ -166,12 +166,14 @@ PROPERTY_BOUNDS: Dict[str, FieldBounds] = {
         unit='Nm', kind='float', zero_ok=False,
     ),
     'MaxRPM': FieldBounds(
-        typical_min=2500, typical_max=15000,
-        # PROPERTY_DESCRIPTIONS warns below 600 RPM may break the
-        # engine; heavy diesels below 1500 freeze. We pick 600 as a
-        # universal floor — anything below is dangerous regardless
-        # of variant.
-        hard_min=600, hard_max=30000,
+        # Tightened bounds per Frog: hard floor 2000 rpm (most engines
+        # break, freeze, or behave nonsensically below this); typical
+        # floor 2800 (anything quieter than a heavy diesel at idle is
+        # rare). Hard ceiling 14000 (above this the simulation gets
+        # unstable in MT); typical ceiling 10000 (only F1-class race
+        # engines and high-rev sport bikes legitimately exceed this).
+        typical_min=2800, typical_max=10000,
+        hard_min=2000, hard_max=14000,
         unit='rpm', kind='float', zero_ok=False,
     ),
 
@@ -317,6 +319,137 @@ def parse_value(text: str, kind: str) -> Optional[float]:
         return float(cleaned)
     except (TypeError, ValueError):
         return None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Cross-field RPM curve validation
+# ──────────────────────────────────────────────────────────────────────
+# Bounds derived from typical real-world engine torque/HP curves:
+#
+#   ICE engines (NA petrol, turbo petrol, NA diesel, HD turbo diesel,
+#   sport bikes) span this range for peak-torque-RPM as a fraction of
+#   redline:
+#       Turbo HD diesel  : 25–40%
+#       Turbo petrol     : 30–50%
+#       NA diesel        : 40–60%
+#       NA petrol        : 50–75%
+#       Sport bike       : 60–80%
+#
+#   For peak-HP-RPM:
+#       Turbo HD diesel  : 60–80%
+#       Turbo petrol     : 75–90%
+#       NA diesel        : 75–90%
+#       NA petrol        : 80–95%
+#       Sport bike       : 80–95%
+#
+#   Universal sanity rule: peak HP almost always occurs after peak
+#   torque on ICE. The exception (peak HP RPM == peak torque RPM) is
+#   rare but physically possible — we allow equality, only flag when
+#   peak HP comes earlier than peak torque.
+#
+#   Electric motors are a different beast: peak torque is at 0 RPM
+#   (constant-torque region) and peak HP comes mid-range during the
+#   constant-power region. None of the ICE rules apply, so callers
+#   should pass is_ev=True to skip these checks entirely.
+
+# Soft (warning) range for peak-torque-RPM as a fraction of MaxRPM.
+_PEAK_TORQUE_TYPICAL_PCT = (25, 90)
+# Hard (error) floor — peak torque below 10% of redline is nonsensical
+# for ICE; the engine couldn't even idle let alone make power there.
+# Upper hard limit is the redline itself (100% — peak torque AT redline
+# is unusual but possible).
+_PEAK_TORQUE_HARD_PCT = (10, 100)
+
+# Soft range for peak-HP-RPM as a fraction of MaxRPM.
+_PEAK_HP_TYPICAL_PCT = (60, 100)
+# Hard floor — peak HP at <30% of redline means almost no power band.
+_PEAK_HP_HARD_PCT = (30, 100)
+
+
+def _pct(numer: float, denom: float) -> Optional[float]:
+    """Return numer/denom * 100, or None when denom is 0/negative."""
+    if denom is None or denom <= 0:
+        return None
+    return (numer / denom) * 100.0
+
+
+def validate_rpm_curve(peak_torque_rpm: Optional[float],
+                       peak_hp_rpm: Optional[float],
+                       max_rpm: Optional[float],
+                       is_ev: bool = False) -> Tuple[ValidationResult, ValidationResult]:
+    """Cross-field validation of the peak-torque-RPM and peak-HP-RPM
+    inputs against MaxRPM. EV mode bypasses both checks (ICE curve
+    conventions don't apply to constant-torque/constant-power motors).
+
+    Returns ``(peak_torque_result, peak_hp_result)``. Either may be
+    OK / warn / error. The most-severe issue per field wins.
+    """
+    if is_ev:
+        return _OK, _OK
+    if max_rpm is None or max_rpm <= 0:
+        # MaxRPM hasn't been set yet (or is invalid); the per-field
+        # validator already flags this. Skip the cross check rather
+        # than emit a misleading "% of nothing" message.
+        return _OK, _OK
+
+    # ── Peak torque RPM as % of redline ──
+    pt_result: ValidationResult = _OK
+    if peak_torque_rpm is not None and peak_torque_rpm > 0:
+        pct = _pct(peak_torque_rpm, max_rpm)
+        if pct is not None:
+            if pct < _PEAK_TORQUE_HARD_PCT[0] or pct > _PEAK_TORQUE_HARD_PCT[1]:
+                pt_result = _err(
+                    f'Peak torque at {pct:.0f}% of redline is outside '
+                    f'the safe ICE range '
+                    f'({_PEAK_TORQUE_HARD_PCT[0]}–{_PEAK_TORQUE_HARD_PCT[1]}%)'
+                )
+            elif pct < _PEAK_TORQUE_TYPICAL_PCT[0] or pct > _PEAK_TORQUE_TYPICAL_PCT[1]:
+                pt_result = _warn(
+                    f'Peak torque at {pct:.0f}% of redline is unusual — '
+                    f'typical ICE engines peak between '
+                    f'{_PEAK_TORQUE_TYPICAL_PCT[0]}–{_PEAK_TORQUE_TYPICAL_PCT[1]}%'
+                )
+
+    # ── Peak HP RPM as % of redline ──
+    ph_result: ValidationResult = _OK
+    if peak_hp_rpm is not None and peak_hp_rpm > 0:
+        pct = _pct(peak_hp_rpm, max_rpm)
+        if pct is not None:
+            if pct < _PEAK_HP_HARD_PCT[0] or pct > _PEAK_HP_HARD_PCT[1]:
+                ph_result = _err(
+                    f'Peak HP at {pct:.0f}% of redline is outside '
+                    f'the safe ICE range '
+                    f'({_PEAK_HP_HARD_PCT[0]}–{_PEAK_HP_HARD_PCT[1]}%)'
+                )
+            elif pct < _PEAK_HP_TYPICAL_PCT[0] or pct > _PEAK_HP_TYPICAL_PCT[1]:
+                ph_result = _warn(
+                    f'Peak HP at {pct:.0f}% of redline is unusual — '
+                    f'typical ICE engines peak between '
+                    f'{_PEAK_HP_TYPICAL_PCT[0]}–{_PEAK_HP_TYPICAL_PCT[1]}%'
+                )
+
+    # ── Ordering rule: peak HP shouldn't be earlier than peak torque ──
+    # Almost universal on ICE — the engine builds torque early then
+    # HP rises with RPM as torque tapers. Flag the inversion as a
+    # warning (not error — some pure-race engines technically can
+    # have inverted curves due to cam tuning).
+    if (peak_torque_rpm is not None and peak_hp_rpm is not None
+            and peak_torque_rpm > 0 and peak_hp_rpm > 0
+            and peak_hp_rpm < peak_torque_rpm):
+        msg = (
+            f'Peak HP ({int(peak_hp_rpm):,} rpm) occurs BEFORE peak '
+            f'torque ({int(peak_torque_rpm):,} rpm) — inverted curve, '
+            f'almost no real ICE behaves this way'
+        )
+        # Apply to whichever field is currently OK so we don't drop
+        # an existing % error. If both fields are already errored,
+        # leave them; the user has bigger issues to fix first.
+        if not ph_result.is_error:
+            ph_result = _warn(msg) if ph_result.status == 'ok' else ph_result
+        if not pt_result.is_error and ph_result.status != 'warn':
+            pt_result = _warn(msg) if pt_result.status == 'ok' else pt_result
+
+    return pt_result, ph_result
 
 
 def validate(text: str, bounds: Optional[FieldBounds],

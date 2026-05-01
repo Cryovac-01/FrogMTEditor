@@ -1190,9 +1190,135 @@ class PartEditorForm(QtWidgets.QWidget):
         # Type combo selection. Run after row widgets are built; safe
         # to call even if the form has no fuel combo (no-op then).
         self._apply_fuel_type_visibility()
+        # Wire live cross-field RPM curve checks (no-op when synthetic
+        # peak_torque_rpm / peak_hp_rpm inputs aren't present).
+        self._wire_rpm_curve_listeners()
+        # Initial render so a freshly-loaded engine already shows any
+        # curve issues without waiting for the user to type.
+        self._refresh_rpm_curve_visuals()
 
     def has_changes(self) -> bool:
         return bool(self.get_changed_payload())
+
+    # ------------------------------------------------------------------
+    # Cross-field RPM curve validation
+    # ------------------------------------------------------------------
+    # Peak torque RPM and peak HP RPM each have their own raw bounds
+    # (handled by the per-field validator), but they must also make
+    # sense relative to MaxRPM. A 4000-rpm peak torque on a 5000-rpm
+    # redline is reasonable; a 400-rpm peak torque on the same redline
+    # is nonsense. The cross-check below runs whenever any of the
+    # three fields changes, stashes the result on the affected
+    # widgets via a `crossFieldResult` property, and refreshes their
+    # border colour. Save-time validation_summary() folds the same
+    # results into its errors/warnings list.
+
+    _CROSS_FIELD_KEY = "crossFieldResult"
+
+    def _read_int_field(self, widget: Optional[QtWidgets.QWidget]) -> Optional[float]:
+        """Pull a numeric value out of a QLineEdit, tolerating commas
+        and returning None for blank / unparseable input."""
+        if widget is None:
+            return None
+        text = widget.text() if hasattr(widget, 'text') else ''
+        return _fb.parse_value(text, 'float')
+
+    def _is_engine_ev(self) -> bool:
+        """Determine whether the current engine is an EV — used to
+        skip the ICE-shaped curve checks. Prefers the live Fuel Type
+        combo, falls back to the loaded metadata."""
+        if self.fuel_type_combo is not None:
+            try:
+                fuel = str(self.fuel_type_combo.currentData() or '').lower()
+                if fuel:
+                    return fuel == 'electric'
+            except Exception:
+                pass
+        meta = (self.part or {}).get('metadata') or {}
+        return bool(meta.get('is_ev'))
+
+    def _refresh_rpm_curve_visuals(self) -> None:
+        """Recompute the cross-field RPM curve check and update the
+        widgets' border colours + stash the result for save-time
+        querying. Safe to call when the relevant fields don't exist
+        (no-op in that case)."""
+        max_rpm_widget = self.property_widgets.get('MaxRPM')
+        pt_widget = self.peak_torque_rpm_input
+        ph_widget = self.peak_hp_rpm_input
+        if pt_widget is None and ph_widget is None:
+            return  # No creator-mode synthetic inputs to update.
+
+        max_rpm = self._read_int_field(max_rpm_widget)
+        peak_torque = self._read_int_field(pt_widget)
+        peak_hp = self._read_int_field(ph_widget)
+
+        pt_result, ph_result = _fb.validate_rpm_curve(
+            peak_torque_rpm=peak_torque,
+            peak_hp_rpm=peak_hp,
+            max_rpm=max_rpm,
+            is_ev=self._is_engine_ev(),
+        )
+
+        for widget, result in ((pt_widget, pt_result), (ph_widget, ph_result)):
+            if widget is None:
+                continue
+            # Stash the cross-field result so validation_summary can
+            # pick it up alongside the per-field result.
+            widget.setProperty(self._CROSS_FIELD_KEY,
+                               {'status': result.status, 'message': result.message})
+            self._apply_cross_field_border(widget, result)
+
+    def _apply_cross_field_border(self, widget: QtWidgets.QWidget,
+                                   result: _fb.ValidationResult) -> None:
+        """Overlay a border colour on the widget reflecting the
+        worst of (per-field result, cross-field result). Per-field
+        errors win; cross-field warnings appear when per-field is OK."""
+        per_field_status = _fv.current_status(widget) or 'ok'
+        # Severity ordering: error > warn > ok
+        order = {'ok': 0, 'warn': 1, 'error': 2}
+        worst = max((per_field_status, result.status), key=lambda s: order.get(s, 0))
+
+        # Re-render with the worst status. Reuse the validator's style
+        # constants so the colour palette stays in sync.
+        base = widget.property('baseStyleSheet') or ''
+        if not base:
+            base = widget.styleSheet()
+            widget.setProperty('baseStyleSheet', base)
+        override = _fv._BORDER_STYLES.get(worst, '')
+        widget.setStyleSheet(base + ('\n' + override if override else ''))
+
+        # Augment the tooltip so hover surfaces the cross-field
+        # message even though there's no inline label for the
+        # synthetic inputs (they're inline within other rows).
+        if result.status != 'ok':
+            tip = widget.toolTip() or ''
+            sep = '\n\n' if tip and not tip.endswith(result.message) else ''
+            if result.message and result.message not in tip:
+                widget.setToolTip(f'{tip}{sep}{result.message}')
+
+    def _wire_rpm_curve_listeners(self) -> None:
+        """Connect textChanged handlers on the three RPM-curve fields
+        so any edit refreshes the cross-check. Also hooks the Fuel
+        Type combo because EV mode toggles whether the rules apply."""
+        widgets = [
+            self.property_widgets.get('MaxRPM'),
+            self.peak_torque_rpm_input,
+            self.peak_hp_rpm_input,
+        ]
+        for w in widgets:
+            if w is None:
+                continue
+            try:
+                w.textChanged.connect(lambda _t='', s=self: s._refresh_rpm_curve_visuals())
+            except Exception:
+                pass
+        if self.fuel_type_combo is not None:
+            try:
+                self.fuel_type_combo.currentIndexChanged.connect(
+                    lambda _i=0, s=self: s._refresh_rpm_curve_visuals()
+                )
+            except Exception:
+                pass
 
     def validation_summary(self) -> Dict[str, List[Tuple[str, str]]]:
         """Walk every validator-attached widget on this form and
@@ -1243,6 +1369,30 @@ class PartEditorForm(QtWidgets.QWidget):
         _check('Peak Torque RPM', self.peak_torque_rpm_input)
         _check('Max HP',          self.max_hp_input)
         _check('Peak HP RPM',     self.peak_hp_rpm_input)
+
+        # Cross-field RPM curve checks. Read the property each
+        # widget stashed during the last live refresh; if a widget
+        # has no cross-field result yet (form just loaded), recompute
+        # one shot synchronously so save-time doesn't miss it.
+        if (self.peak_torque_rpm_input is not None
+                or self.peak_hp_rpm_input is not None):
+            self._refresh_rpm_curve_visuals()
+
+        def _check_cross(label: str, widget: Optional[QtWidgets.QWidget]) -> None:
+            if widget is None:
+                return
+            raw = widget.property(self._CROSS_FIELD_KEY)
+            if not raw:
+                return
+            status = raw.get('status')
+            msg = str(raw.get('message') or '')
+            if status == 'error':
+                errors.append((label, msg))
+            elif status == 'warn':
+                warnings.append((label, msg))
+
+        _check_cross('Peak Torque RPM (curve)', self.peak_torque_rpm_input)
+        _check_cross('Peak HP RPM (curve)',     self.peak_hp_rpm_input)
 
         return {'errors': errors, 'warnings': warnings}
 
