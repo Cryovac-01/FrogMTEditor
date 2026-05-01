@@ -102,6 +102,33 @@ TIRE_VEHICLE_TYPE_CHOICES = [
     ('Heavy Machine (Rear)', 'HeavyMachineRearTire'),
 ]
 
+class ArrowComboBox(QtWidgets.QComboBox):
+    """QComboBox that paints a triangular ▼ arrow on the right edge
+    after rendering. Works around the dark-theme drop-down arrow
+    rendering as a small light rectangle on Windows. Drawn via
+    QPainter so it never depends on a font glyph or a Qt image asset."""
+
+    _ARROW_HALF_WIDTH = 5    # half-width of the triangle base
+    _ARROW_HEIGHT     = 5    # vertical depth of the triangle
+    _ARROW_RIGHT_PAD  = 11   # px from the right edge to the triangle's center
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        rect = self.rect()
+        cx = rect.right() - self._ARROW_RIGHT_PAD
+        cy = rect.center().y()
+        poly = QtGui.QPolygonF([
+            QtCore.QPointF(cx - self._ARROW_HALF_WIDTH, cy - self._ARROW_HEIGHT // 2),
+            QtCore.QPointF(cx + self._ARROW_HALF_WIDTH, cy - self._ARROW_HEIGHT // 2),
+            QtCore.QPointF(cx, cy + self._ARROW_HEIGHT),
+        ])
+        painter.setBrush(TEXT_COLOR)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.drawPolygon(poly)
+
+
 class LevelRequirementsWidget(QtWidgets.QWidget):
     """Compact UI for the engine's LevelRequirementToBuy TMap.
 
@@ -178,33 +205,6 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
         p.end()
         return QtGui.QIcon(pix)
 
-    @staticmethod
-    def _combo_dropdown_qss() -> str:
-        """QSS snippet that draws an explicit ▼ down-arrow using only
-        CSS borders (no image asset needed). Applied to the category
-        combos so the arrow is guaranteed visible regardless of the
-        host Qt style or any inherited stylesheet that may have
-        suppressed the default arrow."""
-        text_hex = TEXT_COLOR.name()
-        border_hex = GRID_COLOR.name()
-        return (
-            "QComboBox::drop-down {"
-            "  subcontrol-origin: padding;"
-            "  subcontrol-position: top right;"
-            "  width: 22px;"
-            f"  border-left: 1px solid {border_hex};"
-            "}"
-            "QComboBox::down-arrow {"
-            # Triangular arrow drawn via CSS borders
-            "  width: 0;"
-            "  height: 0;"
-            "  border-left: 5px solid transparent;"
-            "  border-right: 5px solid transparent;"
-            f"  border-top: 6px solid {text_hex};"
-            "  margin-right: 6px;"
-            "}"
-        )
-
     # ------------------------------------------------------------------
     # Row management
     # ------------------------------------------------------------------
@@ -214,10 +214,8 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
         row_h.setContentsMargins(0, 0, 0, 0)
         row_h.setSpacing(8)
 
-        category_combo = QtWidgets.QComboBox()
+        category_combo = ArrowComboBox()
         configure_field_control(category_combo, "editor")
-        # Explicit ▼ arrow so the dropdown indicator is always visible.
-        category_combo.setStyleSheet(self._combo_dropdown_qss())
         for label, key in CHARACTER_LEVEL_CHOICES:
             category_combo.addItem(label, key)
         for i in range(category_combo.count()):
@@ -524,7 +522,7 @@ class PartEditorForm(QtWidgets.QWidget):
     def _add_sound_entry(self, form: QtWidgets.QFormLayout, value: str) -> None:
         label = QtWidgets.QLabel("Sound Pack")
         set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
-        combo = QtWidgets.QComboBox()
+        combo = ArrowComboBox()
         configure_field_control(combo, "editor")
         combo.setEditable(True)
         combo.addItems([item["dir"] for item in self.sound_options])
@@ -538,7 +536,7 @@ class PartEditorForm(QtWidgets.QWidget):
         """Add a Vehicle Type dropdown for engine creation."""
         label = QtWidgets.QLabel("Vehicle Type")
         set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
-        combo = QtWidgets.QComboBox()
+        combo = ArrowComboBox()
         configure_field_control(combo, "editor")
         for display_label, donor_name in VEHICLE_TYPE_CHOICES:
             combo.addItem(display_label, donor_name)
@@ -579,7 +577,7 @@ class PartEditorForm(QtWidgets.QWidget):
         form only exposes fields that apply to the chosen fuel type."""
         label = QtWidgets.QLabel("Fuel Type")
         set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
-        combo = QtWidgets.QComboBox()
+        combo = ArrowComboBox()
         configure_field_control(combo, "editor")
         for display_label, key in FUEL_TYPE_CHOICES:
             combo.addItem(display_label, key)
@@ -696,7 +694,7 @@ class PartEditorForm(QtWidgets.QWidget):
         """Add a Vehicle Type dropdown for tire creation."""
         label = QtWidgets.QLabel("Vehicle Type")
         set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
-        combo = QtWidgets.QComboBox()
+        combo = ArrowComboBox()
         configure_field_control(combo, "editor")
         for display_label, donor_name in TIRE_VEHICLE_TYPE_CHOICES:
             combo.addItem(display_label, donor_name)
