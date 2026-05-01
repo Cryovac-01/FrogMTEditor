@@ -166,7 +166,7 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
         pix.fill(QtCore.Qt.GlobalColor.transparent)
         p = QtGui.QPainter(pix)
         p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
-        pen = QtGui.QPen(QtGui.QColor(_TEXT))
+        pen = QtGui.QPen(TEXT_COLOR)
         pen.setWidthF(2.0)
         pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
         p.setPen(pen)
@@ -185,12 +185,14 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
         combos so the arrow is guaranteed visible regardless of the
         host Qt style or any inherited stylesheet that may have
         suppressed the default arrow."""
+        text_hex = TEXT_COLOR.name()
+        border_hex = GRID_COLOR.name()
         return (
             "QComboBox::drop-down {"
             "  subcontrol-origin: padding;"
             "  subcontrol-position: top right;"
             "  width: 22px;"
-            "  border-left: 1px solid " + _BORDER + ";"
+            f"  border-left: 1px solid {border_hex};"
             "}"
             "QComboBox::down-arrow {"
             # Triangular arrow drawn via CSS borders
@@ -198,7 +200,7 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
             "  height: 0;"
             "  border-left: 5px solid transparent;"
             "  border-right: 5px solid transparent;"
-            "  border-top: 6px solid " + _TEXT + ";"
+            f"  border-top: 6px solid {text_hex};"
             "  margin-right: 6px;"
             "}"
         )
