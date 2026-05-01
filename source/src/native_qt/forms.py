@@ -5,6 +5,7 @@ from .theme import *
 from typing import Tuple  # not re-exported by `from .theme import *`
 from . import field_bounds as _fb
 from . import field_validator as _fv
+from .curve_preview import InlineCurvePreview as _InlineCurvePreview
 
 # Vehicle type choices for engine creation.
 # Each entry: (display_label, donor_row_name).
@@ -474,6 +475,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.level_requirements_widget: Optional[LevelRequirementsWidget] = None
         self.volume_offset_widget: Optional[VolumeOffsetWidget] = None
         self.original_volume_offset: Optional[int] = None
+        self.curve_preview: Optional[_InlineCurvePreview] = None
         # Row-wrapper widgets keyed by property name. Used to hide /
         # show whole rows (label + input + helper text) dynamically
         # in response to the Fuel Type combo, e.g. EV-only properties
@@ -538,6 +540,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.level_requirements_widget = None
         self.volume_offset_widget = None
         self.original_volume_offset = None
+        self.curve_preview = None
         self.property_row_widgets = {}
         self._previous_fuel_type = ""
         self._suppress_fuel_handler = False
@@ -1159,6 +1162,19 @@ class PartEditorForm(QtWidgets.QWidget):
                 self._add_property_row(layout, key, prop)
             self.content_layout.addWidget(group)
 
+        # Inline live torque/HP preview — only in creator mode for
+        # engines, since the synthetic peak_torque_rpm / max_hp /
+        # peak_hp_rpm inputs that drive it only exist there. Placed
+        # after the property cards so it sits below the MaxTorque /
+        # MaxRPM / MaxHP rows it depends on.
+        if self.creator_mode and self.part_type == "engine":
+            curve_card, curve_card_layout = build_creator_grid_card(
+                self._display_section_title("Curve Preview")
+            )
+            self.curve_preview = _InlineCurvePreview(curve_card)
+            curve_card_layout.addWidget(self.curve_preview)
+            self.content_layout.addWidget(curve_card)
+
         if not self.creator_mode:
             self.content_layout.addStretch(1)
 
@@ -1194,8 +1210,10 @@ class PartEditorForm(QtWidgets.QWidget):
         # peak_torque_rpm / peak_hp_rpm inputs aren't present).
         self._wire_rpm_curve_listeners()
         # Initial render so a freshly-loaded engine already shows any
-        # curve issues without waiting for the user to type.
+        # curve issues + the inline torque/HP preview without waiting
+        # for the user to type.
         self._refresh_rpm_curve_visuals()
+        self._refresh_curve_preview()
 
     def has_changes(self) -> bool:
         return bool(self.get_changed_payload())
@@ -1299,17 +1317,27 @@ class PartEditorForm(QtWidgets.QWidget):
     def _wire_rpm_curve_listeners(self) -> None:
         """Connect textChanged handlers on the three RPM-curve fields
         so any edit refreshes the cross-check. Also hooks the Fuel
-        Type combo because EV mode toggles whether the rules apply."""
+        Type combo because EV mode toggles whether the rules apply.
+        Additionally refreshes the inline curve preview (which depends
+        on MaxTorque too, so MaxTorque is included in the listener
+        set)."""
         widgets = [
             self.property_widgets.get('MaxRPM'),
+            self.property_widgets.get('MaxTorque'),
             self.peak_torque_rpm_input,
             self.peak_hp_rpm_input,
+            self.max_hp_input,
         ]
+
+        def _refresh_all(_text=''):
+            self._refresh_rpm_curve_visuals()
+            self._refresh_curve_preview()
+
         for w in widgets:
             if w is None:
                 continue
             try:
-                w.textChanged.connect(lambda _t='', s=self: s._refresh_rpm_curve_visuals())
+                w.textChanged.connect(_refresh_all)
             except Exception:
                 pass
         if self.fuel_type_combo is not None:
@@ -1319,6 +1347,30 @@ class PartEditorForm(QtWidgets.QWidget):
                 )
             except Exception:
                 pass
+
+    def _refresh_curve_preview(self) -> None:
+        """Pull the five live values out of their widgets and re-render
+        the inline torque/HP preview. Safe no-op when the widget
+        doesn't exist (non-creator mode, non-engine part)."""
+        if self.curve_preview is None:
+            return
+        max_rpm     = self._read_int_field(self.property_widgets.get('MaxRPM'))
+        max_torque  = self._read_int_field(self.property_widgets.get('MaxTorque'))
+        peak_torque = self._read_int_field(self.peak_torque_rpm_input)
+        max_hp      = self._read_int_field(self.max_hp_input)
+        peak_hp     = self._read_int_field(self.peak_hp_rpm_input)
+        try:
+            self.curve_preview.refresh(
+                max_rpm=max_rpm,
+                max_torque_nm=max_torque,
+                peak_torque_rpm=peak_torque,
+                max_hp=max_hp,
+                peak_hp_rpm=peak_hp,
+            )
+        except Exception:
+            # Preview is non-critical — silent on failure rather than
+            # blowing up the form for a chart issue.
+            pass
 
     def validation_summary(self) -> Dict[str, List[Tuple[str, str]]]:
         """Walk every validator-attached widget on this form and
