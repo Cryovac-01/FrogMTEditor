@@ -499,7 +499,15 @@ class CreatorWorkspace(QtWidgets.QWidget):
             self.form.clear()
         self._set_status("Choose a template or donor to begin.", "notice")
 
-    def begin_engine(self, sound_options: List[Dict[str, str]], live_version: str, fixed_template: Optional[Dict[str, Any]] = None) -> None:
+    def begin_engine(self, sound_options: List[Dict[str, str]], live_version: str,
+                     fixed_template: Optional[Dict[str, Any]] = None,
+                     initial_donor: Optional[Dict[str, Any]] = None) -> None:
+        # `fixed_template`  → forking an existing user-generated engine.
+        # `initial_donor`   → fresh "Create New" with a default vanilla
+        #                     engine pre-loaded so the form starts
+        #                     populated (mode stays "create-engine").
+        # Neither           → legacy empty-form behaviour (kept as a
+        #                     fallback if some caller passes nothing).
         self.mode = "fork-engine" if fixed_template else "create-engine"
         self.live_version = live_version
         self.sound_options = list(sound_options or [])
@@ -515,17 +523,26 @@ class CreatorWorkspace(QtWidgets.QWidget):
         self.create_button.setIcon(self.app.primary_icons["engine"])
         self.name_edit.blockSignals(True)
         self.name_edit.clear()
-        self.name_edit.setPlaceholderText(f"{fixed_template.get('name', '')}Copy" if fixed_template else "myCustomEngine")
+        if fixed_template:
+            placeholder = f"{fixed_template.get('name', '')}Copy"
+        else:
+            placeholder = "myCustomEngine"
+        self.name_edit.setPlaceholderText(placeholder)
         self.name_edit.blockSignals(False)
         self.original_name = ""
         if fixed_template:
             self.load_part(dict(fixed_template.get("detail") or {}), row=None)
+        elif initial_donor:
+            # Drop straight into the editable form using the donor as
+            # the starting point. User can switch donor via the
+            # Vehicle Type combo if they want different defaults.
+            self.load_part(dict(initial_donor.get("detail") or {}), row=None)
         else:
             self.badge_label.hide()
-            self.summary_label.setText("Choose an engine template from the left rail.")
+            self.summary_label.setText("Pick a Vehicle Type below to set the donor, then fill in the form.")
             if self.form:
-                self.form.clear("Choose an engine template from the left rail to start building a new engine.")
-            self._set_status("Choose a template to start.", "notice")
+                self.form.clear("Choose a vehicle type to start building a new engine.")
+            self._set_status("Pick a Vehicle Type to start.", "notice")
             self.create_button.setEnabled(False)
 
     def begin_tire(self, live_version: str) -> None:

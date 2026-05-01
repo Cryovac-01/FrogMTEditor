@@ -4225,8 +4225,12 @@ def create_engine(data: Dict) -> Dict:
     vehicle_type = str(data.get('vehicle_type') or '').strip() or None
     expected_version = (data.get('expected_version') or '').strip()
 
+    # If no template was named explicitly, fall back to the vehicle_type
+    # selection (already a vanilla engine name like 'HeavyDuty_440HP').
+    # Final fallback to a sane default so the form is never blocked
+    # waiting for an explicit pick.
     if not template_name:
-        return {'error': 'No template engine specified'}
+        template_name = (vehicle_type or '').strip() or 'HeavyDuty_440HP'
     if not new_name:
         return {'error': 'No name specified for new engine'}
 
@@ -4238,14 +4242,24 @@ def create_engine(data: Dict) -> Dict:
     engine_dir = MOD_ENGINE_DIR
     os.makedirs(engine_dir, exist_ok=True)
 
-    # Load template from the curated template set first, with mod engines as fallback.
+    # Source-of-property-values lookup order:
+    #   1. Curated template set (data/templates/Engine/) — historical;
+    #      empty by default since v6.x cleanup.
+    #   2. User's previously-generated mod engines (engine_dir).
+    #   3. Vanilla base-game engines (VANILLA_BASE/Engine/) — used as
+    #      the default starting point for new creations now that the
+    #      curated template set has been emptied.
     template_uexp = os.path.join(TEMPLATES_ENGINE_DIR, template_name + '.uexp')
     template_uasset = os.path.join(TEMPLATES_ENGINE_DIR, template_name + '.uasset')
     if not os.path.isfile(template_uexp) or not os.path.isfile(template_uasset):
         template_uexp = os.path.join(engine_dir, template_name + '.uexp')
         template_uasset = os.path.join(engine_dir, template_name + '.uasset')
     if not os.path.isfile(template_uexp) or not os.path.isfile(template_uasset):
-        return {'error': f'Template "{template_name}" not found'}
+        vanilla_engine_dir = os.path.join(VANILLA_BASE, 'Engine')
+        template_uexp = os.path.join(vanilla_engine_dir, template_name + '.uexp')
+        template_uasset = os.path.join(vanilla_engine_dir, template_name + '.uasset')
+    if not os.path.isfile(template_uexp) or not os.path.isfile(template_uasset):
+        return {'error': f'Template "{template_name}" not found in templates/, mod/, or vanilla/'}
 
     template_audit = None
     if os.path.dirname(os.path.abspath(template_uexp)) == os.path.abspath(TEMPLATES_ENGINE_DIR):

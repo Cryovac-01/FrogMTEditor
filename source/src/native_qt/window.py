@@ -1883,14 +1883,39 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         if path:
             self.select_path_if_present(path)
 
+    # Default vanilla donor for "New Engine" — fills the form with sane
+    # starting values so the user can tweak instead of starting blank.
+    # Matches the first non-empty entry in VEHICLE_TYPE_CHOICES so the
+    # combo and the loaded data agree out of the gate.
+    _DEFAULT_NEW_ENGINE_DONOR = "HeavyDuty_440HP"
+
     def open_engine_creator(self) -> None:
         if self._creator_mode_active() and not self._confirm_leave_creator_mode():
             return
-        catalog = self.service.get_engine_templates()
         self._creator_return_path = str((self.current_part or {}).get("path") or "")
-        self.creator_workspace.begin_engine(self.sound_options, self.live_state_version)
+
+        # Pre-load a default vanilla engine so the user drops straight
+        # into the editable form instead of an empty template picker.
+        # The legacy templates folder is empty since v6.x; vanilla
+        # engines are the new starting point.
+        donor_path = f"vanilla/Engine/{self._DEFAULT_NEW_ENGINE_DONOR}"
+        donor_detail = self.service.get_part_detail(donor_path)
+        if donor_detail.get("error"):
+            QtWidgets.QMessageBox.critical(
+                self, APP_NAME,
+                f"Could not load default donor engine "
+                f"'{self._DEFAULT_NEW_ENGINE_DONOR}': {donor_detail.get('error')}"
+            )
+            return
+
+        self.creator_workspace.begin_engine(
+            self.sound_options, self.live_state_version,
+            initial_donor={"name": self._DEFAULT_NEW_ENGINE_DONOR, "detail": donor_detail},
+        )
         self._set_workspace_mode("create-engine")
-        self.creator_sidebar.show_engine_catalog(catalog)
+        # Sidebar intentionally NOT populated with the (empty) template
+        # catalog — the form is the entire workflow now.
+        self.creator_sidebar.clear_mode()
         self._record_activity("Opened in-window engine creator.")
 
     def fork_engine(self) -> None:
