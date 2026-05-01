@@ -1320,23 +1320,81 @@ def _compute_hp_from_curve(engine_dir: str, engine_name: str,
     Uses ``HP = MaxTorque_Nm × curve(t) × RPM / 7121`` and returns the peak.
     Returns 0 if no curve file is found.
     """
+    peaks = _compute_curve_peaks(engine_dir, engine_name, max_torque_nm, max_rpm)
+    return peaks.get('max_hp', 0.0) if peaks else 0.0
+
+
+def _compute_curve_peaks(engine_dir: str, engine_name: str,
+                         max_torque_nm: float, max_rpm: float,
+                         is_ev: bool = False,
+                         estimated_hp: float = 0.0) -> Dict[str, float]:
+    """Derive peak-torque-RPM, peak-HP-RPM, and peak HP for an engine.
+
+    Used to pre-fill the Engine Creator's "Max Torque @ RPM" and
+    "Max HP @ RPM" fields when the user forks from a vanilla engine
+    (which has no saved creation_inputs metadata).
+
+    Strategy:
+      1. If a per-engine curve file exists at
+         engine_dir/TorqueCurve/TorqueCurve_<name>.uexp — sweep it
+         and return the actual peaks (Frog-Mod-Editor-generated
+         engines ship one of these).
+      2. Otherwise, fall back to type-appropriate defaults so the
+         user gets reasonable starting values instead of blank fields:
+            ICE: peak torque around 50% of max RPM, peak HP around 85%
+            EV:  peak torque around 0 RPM, peak HP around 60%
+         Max HP comes from the engine's estimated_hp() (or the
+         curve-based display HP if already computed).
+    Returns an empty dict only if max_rpm or max_torque_nm are zero.
+    """
+    if max_torque_nm <= 0 or max_rpm <= 0:
+        return {}
+
+    # Path 1: per-engine curve (Frog-Mod-Editor-generated engines)
     tc_uexp = os.path.join(engine_dir, 'TorqueCurve', f'TorqueCurve_{engine_name}.uexp')
-    if not os.path.isfile(tc_uexp) or max_torque_nm <= 0 or max_rpm <= 0:
-        return 0.0
-    try:
-        from parsers.uexp_torquecurve import parse_torque_curve
-        tc_data = open(tc_uexp, 'rb').read()
-        curve = parse_torque_curve(tc_data)
-        best_hp = 0.0
-        for i in range(1, 1001):
-            t = i / 1000.0
-            v = curve.evaluate(t)
-            hp = max_torque_nm * v * (t * max_rpm) / 7121.0
-            if hp > best_hp:
-                best_hp = hp
-        return round(best_hp, 1)
-    except Exception:
-        return 0.0
+    if os.path.isfile(tc_uexp):
+        try:
+            from parsers.uexp_torquecurve import parse_torque_curve
+            tc_data = open(tc_uexp, 'rb').read()
+            curve = parse_torque_curve(tc_data)
+
+            best_torque_v = 0.0
+            best_torque_t = 0.5
+            best_hp = 0.0
+            best_hp_t = 0.5
+            for i in range(1, 1001):
+                t = i / 1000.0
+                v = curve.evaluate(t)
+                if v > best_torque_v:
+                    best_torque_v = v
+                    best_torque_t = t
+                hp = max_torque_nm * v * (t * max_rpm) / 7121.0
+                if hp > best_hp:
+                    best_hp = hp
+                    best_hp_t = t
+            return {
+                'peak_torque_rpm': round(best_torque_t * max_rpm, 0),
+                'peak_hp_rpm':     round(best_hp_t * max_rpm, 0),
+                'max_hp':          round(best_hp, 1),
+            }
+        except Exception:
+            pass  # fall through to the typed-default path
+
+    # Path 2: vanilla / shared-curve engines — type-appropriate defaults
+    if is_ev:
+        torque_t = 0.05  # EVs deliver peak torque from near-stall
+        hp_t     = 0.60  # peak power roughly mid-rpm
+    else:
+        torque_t = 0.50  # ICE peak torque mid-band
+        hp_t     = 0.85  # peak HP near (but not at) redline
+    fallback_hp = round(estimated_hp, 1) if estimated_hp > 0 else round(
+        max_torque_nm * (hp_t * max_rpm) / 7121.0, 1
+    )
+    return {
+        'peak_torque_rpm': round(torque_t * max_rpm, 0),
+        'peak_hp_rpm':     round(hp_t * max_rpm, 0),
+        'max_hp':          fallback_hp,
+    }
 
 
 def _load_creation_meta(engine_dir: str, engine_name: str) -> Dict[str, Any]:
@@ -1939,6 +1997,22 @@ def get_part_detail(part_path: str) -> Dict:
 
                 if _creation_meta:
                     metadata['creation_inputs'] = _creation_meta
+                else:
+                    # No saved creation metadata (typical for vanilla donors and
+                    # any engine not produced by Frog Mod Editor). Derive the
+                    # creator-form fields from the torque curve when available,
+                    # otherwise from type-appropriate defaults, so that forking
+                    # pre-fills "Max Torque @ RPM" and "Max HP @ RPM" with
+                    # sensible donor-derived values instead of leaving them
+                    # blank.
+                    _derived_peaks = _compute_curve_peaks(
+                        _eng_dir, _eng_name,
+                        engine.max_torque_nm, engine.max_rpm,
+                        is_ev=engine.is_ev,
+                        estimated_hp=_display_hp,
+                    )
+                    if _derived_peaks:
+                        metadata['creation_inputs'] = _derived_peaks
 
                 # Sound metadata — parse name table for engine-specific sound path
                 if os.path.isfile(uasset_path):
