@@ -34,12 +34,26 @@ FUEL_TYPE_CHOICES = [
     ('Electric', 'electric'),
 ]
 
-# Engine property keys that only make sense on EV engines. Hidden
-# from the form whenever Fuel Type is Gasoline or Diesel.
+# Engine property keys that only make sense on EV engines. Shown on
+# the form ONLY when Fuel Type = Electric, hidden for Gas / Diesel.
 EV_ONLY_ENGINE_PROPERTIES = (
     "MaxRegenTorqueRatio",
     "MotorMaxPower",
     "MotorMaxVoltage",
+)
+
+# Engine property keys that only make sense on combustion engines
+# (starter motor, idle throttle, rev-match blips, jake brake, etc.).
+# Hidden when Fuel Type = Electric since EVs have no concept of any
+# of these. Visible for Gas / Diesel.
+ICE_ONLY_ENGINE_PROPERTIES = (
+    "StarterTorque",
+    "StarterRPM",
+    "IdleThrottle",
+    "BlipThrottle",
+    "BlipDurationSeconds",
+    "IntakeSpeedEfficiency",
+    "MaxJakeBrakeStep",
 )
 
 # Maps the Fuel Type combo value to MT's FuelType enum integer
@@ -314,8 +328,10 @@ class PartEditorForm(QtWidgets.QWidget):
         self._previous_fuel_type = target_key
 
     def _apply_fuel_type_visibility(self) -> None:
-        """Hide EV-only property rows when the Fuel Type combo is set
-        to Gasoline or Diesel; show them when Electric is selected.
+        """Toggle the rows that depend on Fuel Type:
+          - EV-only properties visible only when Electric.
+          - ICE-only properties (starter, idle, blip, jake brake,
+            intake efficiency) visible only when Gas or Diesel.
         Safe to call before or after the property rows have been
         built — missing keys are simply skipped."""
         if self.fuel_type_combo is None:
@@ -325,6 +341,10 @@ class PartEditorForm(QtWidgets.QWidget):
             wrapper = self.property_row_widgets.get(prop_key)
             if wrapper is not None:
                 wrapper.setVisible(is_electric)
+        for prop_key in ICE_ONLY_ENGINE_PROPERTIES:
+            wrapper = self.property_row_widgets.get(prop_key)
+            if wrapper is not None:
+                wrapper.setVisible(not is_electric)
 
     def _handle_fuel_type_change(self) -> None:
         """Called when the Fuel Type combo's selection changes. If the
