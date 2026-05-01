@@ -788,6 +788,7 @@ class CreatorWorkspace(QtWidgets.QWidget):
             vehicle_type = props.pop('_vehicle_type', '')
             fuel_type = props.pop('_fuel_type', '')
             level_requirements_json = props.pop('_level_requirements', '')
+            volume_offset = props.pop('_volume_offset', '0')
             payload = {
                 "template": template_name,
                 "name": name,
@@ -801,6 +802,7 @@ class CreatorWorkspace(QtWidgets.QWidget):
                 "vehicle_type": vehicle_type,
                 "fuel_type": fuel_type,
                 "level_requirements_json": level_requirements_json,
+                "volume_offset": volume_offset,
             }
 
             def on_done(result: Optional[Dict[str, Any]], error: Optional[Exception]) -> None:

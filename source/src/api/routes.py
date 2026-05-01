@@ -4556,6 +4556,16 @@ def create_engine(data: Dict) -> Dict:
                                 pass
                 except Exception:
                     pass
+            # Per-engine volume adjustment (-25..+25). Each step is a
+            # 4% shift, so the resulting MasterVolume multiplier is
+            # 1.0 + offset * 0.04. Stored verbatim in the sidecar; the
+            # binary application is handled downstream when the engine
+            # is built. Out-of-range or non-numeric values clamp to 0.
+            try:
+                _volume_offset = int(str(data.get('volume_offset') or '0').strip() or '0')
+            except (TypeError, ValueError):
+                _volume_offset = 0
+            _volume_offset = max(-25, min(25, _volume_offset))
             try:
                 _json.dump({
                     'peak_torque_rpm': peak_torque_rpm,
@@ -4564,6 +4574,7 @@ def create_engine(data: Dict) -> Dict:
                     'vehicle_type': vehicle_type or '',
                     'fuel_type': _fuel_type,
                     'level_requirements': _level_requirements,
+                    'volume_offset': _volume_offset,
                 }, open(_creation_meta_path, 'w'))
             except Exception:
                 pass  # Non-critical; fork will fall back to empty fields

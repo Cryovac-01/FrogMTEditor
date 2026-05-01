@@ -340,6 +340,95 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
             self._add_row(str(category_key), max(1, level_int))
 
 
+class VolumeOffsetWidget(QtWidgets.QWidget):
+    """Per-engine volume adjustment slider.
+
+    Range:   -25 .. +25 (integer steps).
+    Mapping: each step shifts the engine's audio output by 4%, so the
+             effective multiplier is ``1.0 + (slider_value * 0.04)``.
+             -25 -> 0% (silent), 0 -> 100% (vanilla), +25 -> 200%.
+
+    Designed for the case where a user picks a sound pack tuned for a
+    different vehicle class (e.g. truck sound on a sports car) and
+    needs to compensate for the resulting volume mismatch.
+
+    The widget round-trips through ``to_payload()`` / ``from_payload()``
+    for sidecar persistence.  Emits ``changed`` whenever the slider
+    moves so the parent form can mark itself dirty.
+    """
+    changed = QtCore.Signal()
+
+    MIN_OFFSET = -25
+    MAX_OFFSET = 25
+    PERCENT_PER_STEP = 4  # whole-number percent shift per slider tick
+
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
+        super().__init__(parent)
+        outer = QtWidgets.QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(10)
+
+        # Slider with tick marks at the min, 0, and max anchors.
+        self._slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self._slider.setRange(self.MIN_OFFSET, self.MAX_OFFSET)
+        self._slider.setValue(0)
+        self._slider.setSingleStep(1)
+        self._slider.setPageStep(5)
+        self._slider.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
+        self._slider.setTickInterval(5)
+        self._slider.setMinimumWidth(180)
+        outer.addWidget(self._slider, 1)
+
+        # Live numeric readout: "+12 (1.48×)" — both the offset and the
+        # resulting multiplier so the user can see what they're picking
+        # without doing the 4%-per-tick math in their head.
+        self._value_label = QtWidgets.QLabel()
+        set_label_kind(self._value_label, "fieldLabel")
+        self._value_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignVCenter
+                                      | QtCore.Qt.AlignmentFlag.AlignRight)
+        self._value_label.setMinimumWidth(95)
+        self._value_label.setToolTip(
+            "Per-engine volume adjustment. Each step shifts the audio "
+            "by 4%. Use to compensate when a sound pack is tuned for "
+            "a different vehicle class than this engine."
+        )
+        outer.addWidget(self._value_label, 0)
+
+        self._slider.valueChanged.connect(self._on_slider_changed)
+        self._refresh_label(0)
+
+    def _refresh_label(self, offset: int) -> None:
+        multiplier = 1.0 + (offset * self.PERCENT_PER_STEP / 100.0)
+        sign = '+' if offset > 0 else ''
+        self._value_label.setText(f"{sign}{offset}  ({multiplier:.2f}×)")
+
+    def _on_slider_changed(self, value: int) -> None:
+        self._refresh_label(int(value))
+        self.changed.emit()
+
+    # ------------------------------------------------------------------
+    # Round-trip API
+    # ------------------------------------------------------------------
+    def to_payload(self) -> int:
+        """Return the current offset as an int (always whole numbers)."""
+        return int(self._slider.value())
+
+    def from_payload(self, value: Optional[int]) -> None:
+        """Restore from a saved sidecar value.  None / missing -> 0."""
+        try:
+            v = int(value) if value is not None else 0
+        except (TypeError, ValueError):
+            v = 0
+        v = max(self.MIN_OFFSET, min(self.MAX_OFFSET, v))
+        # Block the signal so initial population doesn't dirty the form.
+        was_blocked = self._slider.blockSignals(True)
+        try:
+            self._slider.setValue(v)
+        finally:
+            self._slider.blockSignals(was_blocked)
+        self._refresh_label(v)
+
+
 class PartEditorForm(QtWidgets.QWidget):
     changed = QtCore.Signal()
     # Emitted when the user changes Fuel Type to a value that requires
@@ -380,6 +469,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.vehicle_type_combo: Optional[QtWidgets.QComboBox] = None
         self.fuel_type_combo: Optional[QtWidgets.QComboBox] = None
         self.level_requirements_widget: Optional[LevelRequirementsWidget] = None
+        self.volume_offset_widget: Optional[VolumeOffsetWidget] = None
         # Row-wrapper widgets keyed by property name. Used to hide /
         # show whole rows (label + input + helper text) dynamically
         # in response to the Fuel Type combo, e.g. EV-only properties
@@ -442,6 +532,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.vehicle_type_combo = None
         self.fuel_type_combo = None
         self.level_requirements_widget = None
+        self.volume_offset_widget = None
         self.property_row_widgets = {}
         self._previous_fuel_type = ""
         self._suppress_fuel_handler = False
@@ -564,6 +655,24 @@ class PartEditorForm(QtWidgets.QWidget):
         widget.changed.connect(self.changed.emit)
         form.addRow(label, widget)
         self.level_requirements_widget = widget
+
+    def _add_volume_offset_entry(self, form: QtWidgets.QFormLayout,
+                                  saved: Optional[int] = None) -> None:
+        """Add the per-engine Volume Adjustment slider to the engine
+        creator form. Value is an integer offset in [-25, +25]; each
+        step shifts the engine's audio output by 4% (so the resulting
+        multiplier is ``1.0 + offset * 0.04``).
+
+        The slider is for compensating sound-pack/engine class
+        mismatches — e.g. a truck sound pack on a sports car engine
+        plays too quietly, so the user nudges this slider up."""
+        label = QtWidgets.QLabel("Volume Adjustment")
+        set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
+        widget = VolumeOffsetWidget(self)
+        widget.from_payload(saved)
+        widget.changed.connect(self.changed.emit)
+        form.addRow(label, widget)
+        self.volume_offset_widget = widget
 
     def _add_fuel_type_entry(self, form: QtWidgets.QFormLayout,
                              current_value: str = '',
@@ -940,6 +1049,10 @@ class PartEditorForm(QtWidgets.QWidget):
                     form,
                     saved=creation_inputs.get('level_requirements'),
                 )
+                self._add_volume_offset_entry(
+                    form,
+                    saved=creation_inputs.get('volume_offset'),
+                )
         elif self.part_type == "tire":
             self._add_shop_entry(form, "display_name", "Display Name", shop.get("display_name") or part.get("name") or "")
             self._add_shop_entry(form, "code", "Code", shop.get("code") or "")
@@ -1073,6 +1186,12 @@ class PartEditorForm(QtWidgets.QWidget):
             payload['_level_requirements'] = _json.dumps(
                 self.level_requirements_widget.to_payload()
             )
+        if self.volume_offset_widget is not None:
+            # Per-engine audio volume adjustment, integer in [-25,+25].
+            # Server saves it to .creation.json and applies as a
+            # MasterVolume override on the engine's sound data asset
+            # (1.0 + offset * 0.04).
+            payload['_volume_offset'] = str(int(self.volume_offset_widget.to_payload()))
         # Strip thousands-separator commas from every value so users
         # can write "12,000" naturally and the server parses it fine.
         # Skip _level_requirements: it's JSON, commas are syntax there.
