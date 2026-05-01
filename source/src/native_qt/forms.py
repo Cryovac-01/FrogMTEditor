@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 from .theme import *
+from typing import Tuple  # not re-exported by `from .theme import *`
+from . import field_bounds as _fb
+from . import field_validator as _fv
 
 # Vehicle type choices for engine creation.
 # Each entry: (display_label, donor_row_name).
@@ -608,7 +611,25 @@ class PartEditorForm(QtWidgets.QWidget):
             configure_field_control(widget, "editor")
             kind = "line"
         self._connect_widget(widget)
-        form.addRow(field_label, widget)
+
+        # If this shop key has bounds (currently 'price' and 'weight'),
+        # wrap the input in a column layout so we can place an inline
+        # hint label directly below it. Other shop fields (display_name,
+        # description, code, sound_dir) skip the hint and go in raw.
+        bounds = _fb.lookup(key, 'shop') if kind == 'line' else None
+        if bounds is not None:
+            container = QtWidgets.QWidget()
+            container_layout = QtWidgets.QVBoxLayout(container)
+            container_layout.setContentsMargins(0, 0, 0, 0)
+            container_layout.setSpacing(2)
+            container_layout.addWidget(widget)
+            hint = _fv.make_hint_label(container)
+            container_layout.addWidget(hint)
+            _fv.attach(widget, bounds, hint)
+            form.addRow(field_label, container)
+        else:
+            form.addRow(field_label, widget)
+
         self.shop_widgets[key] = widget
         self.shop_kinds[key] = kind
 
@@ -838,6 +859,11 @@ class PartEditorForm(QtWidgets.QWidget):
             "unit": unit,
         }
 
+        # Lookup bounds for this property key. Read-only fields skip
+        # validation entirely (the user can't modify them, and the
+        # warning border on a disabled input would just be confusing).
+        bounds = None if readonly else _fb.lookup(key, 'property')
+
         desc = PROPERTY_DESCRIPTIONS.get(key) or ""
         missing_text = ""
         if readonly and prop.get("missing"):
@@ -880,6 +906,17 @@ class PartEditorForm(QtWidgets.QWidget):
                 configure_field_control(self.peak_torque_rpm_input, "editor")
                 self.peak_torque_rpm_input.setPlaceholderText("RPM")
                 self.peak_torque_rpm_input.setMaximumWidth(100)
+                # Bounds for the synthetic peak-torque-RPM input. The
+                # hint label is the row's `helper_layout` below, but
+                # since this input is inline within the MaxTorque row
+                # we surface bounds via tooltip only — no separate
+                # hint label (would be visually noisy in this row).
+                _ptrb = _fb.lookup('peak_torque_rpm', 'creator_input')
+                if _ptrb is not None:
+                    self.peak_torque_rpm_input.setToolTip(_ptrb.format_tooltip())
+                    _hidden_hint = QtWidgets.QLabel()
+                    _hidden_hint.setVisible(False)
+                    _fv.attach(self.peak_torque_rpm_input, _ptrb, _hidden_hint)
                 field_layout.addWidget(self.peak_torque_rpm_input, 0)
                 ptr_unit = QtWidgets.QLabel("RPM")
                 set_label_kind(ptr_unit, "subtle")
@@ -896,6 +933,19 @@ class PartEditorForm(QtWidgets.QWidget):
             top.addWidget(field_wrap, 1)
             outer.addLayout(top)
 
+            # Inline range hint / validation message — sits directly
+            # below the input row, indented to align with the field
+            # column. Only added when the field has bounds; the
+            # validator handles the visibility transitions internally.
+            if bounds is not None:
+                hint_label = _fv.make_hint_label(wrapper)
+                hint_layout = QtWidgets.QHBoxLayout()
+                hint_layout.setContentsMargins(CREATOR_LABEL_WIDTH + SPACING.md, 0, 0, 0)
+                hint_layout.setSpacing(0)
+                hint_layout.addWidget(hint_label, 1)
+                outer.addLayout(hint_layout)
+                _fv.attach(line, bounds, hint_label)
+
             helper_text = desc or missing_text
             if helper_text:
                 helper_label = QtWidgets.QLabel(helper_text)
@@ -907,7 +957,11 @@ class PartEditorForm(QtWidgets.QWidget):
                 helper_layout.addWidget(helper_label, 1)
                 outer.addLayout(helper_layout)
                 name_label.setToolTip(helper_text)
-                line.setToolTip(helper_text)
+                # Only set the line's tooltip from the helper text if
+                # the validator hasn't already set its own (more
+                # specific) tooltip showing the typical/hard ranges.
+                if bounds is None:
+                    line.setToolTip(helper_text)
 
             parent_layout.addWidget(wrapper)
             # Track the row wrapper so the fuel-type visibility logic
@@ -937,6 +991,12 @@ class PartEditorForm(QtWidgets.QWidget):
                 self.max_hp_input = QtWidgets.QLineEdit()
                 configure_field_control(self.max_hp_input, "editor")
                 self.max_hp_input.setPlaceholderText("HP")
+                _hpb = _fb.lookup('max_hp', 'creator_input')
+                if _hpb is not None:
+                    self.max_hp_input.setToolTip(_hpb.format_tooltip())
+                    _hidden_hp_hint = QtWidgets.QLabel()
+                    _hidden_hp_hint.setVisible(False)
+                    _fv.attach(self.max_hp_input, _hpb, _hidden_hp_hint)
                 hp_field_layout.addWidget(self.max_hp_input, 1)
                 hp_unit = QtWidgets.QLabel("HP")
                 set_label_kind(hp_unit, "subtle")
@@ -950,6 +1010,12 @@ class PartEditorForm(QtWidgets.QWidget):
                 configure_field_control(self.peak_hp_rpm_input, "editor")
                 self.peak_hp_rpm_input.setPlaceholderText("RPM")
                 self.peak_hp_rpm_input.setMaximumWidth(100)
+                _phrb = _fb.lookup('peak_hp_rpm', 'creator_input')
+                if _phrb is not None:
+                    self.peak_hp_rpm_input.setToolTip(_phrb.format_tooltip())
+                    _hidden_phr_hint = QtWidgets.QLabel()
+                    _hidden_phr_hint.setVisible(False)
+                    _fv.attach(self.peak_hp_rpm_input, _phrb, _hidden_phr_hint)
                 hp_field_layout.addWidget(self.peak_hp_rpm_input, 0)
                 hp_rpm_unit = QtWidgets.QLabel("RPM")
                 set_label_kind(hp_rpm_unit, "subtle")
@@ -988,6 +1054,14 @@ class PartEditorForm(QtWidgets.QWidget):
                 top.addWidget(unit_label)
             layout.addLayout(top)
             layout.addWidget(line)
+
+            # Inline range hint / validation message between the input
+            # and the description. Same hookup as the creator branch
+            # so behaviour matches in both modes.
+            if bounds is not None:
+                hint_label = _fv.make_hint_label(wrapper)
+                layout.addWidget(hint_label)
+                _fv.attach(line, bounds, hint_label)
 
             if desc:
                 desc_label = QtWidgets.QLabel(desc)
@@ -1119,6 +1193,58 @@ class PartEditorForm(QtWidgets.QWidget):
 
     def has_changes(self) -> bool:
         return bool(self.get_changed_payload())
+
+    def validation_summary(self) -> Dict[str, List[Tuple[str, str]]]:
+        """Walk every validator-attached widget on this form and
+        collect its current state. Returns a dict::
+
+            {'errors': [(field_label, message), ...],
+             'warnings': [(field_label, message), ...]}
+
+        Save flows call this before submitting so they can:
+          - block the save when ``errors`` is non-empty,
+          - prompt the user with a confirm dialog when only
+            ``warnings`` are present.
+
+        The label used here prefers the property's display name (via
+        :func:`format_property_name`) for property fields and falls
+        back to the dict key for shop fields. Skips widgets that
+        have no validator attached.
+        """
+        errors: List[Tuple[str, str]] = []
+        warnings: List[Tuple[str, str]] = []
+
+        def _check(label: str, widget: Optional[QtWidgets.QWidget]) -> None:
+            if widget is None:
+                return
+            status = _fv.current_status(widget)
+            if status == 'error':
+                errors.append((label, _fv.current_message(widget)))
+            elif status == 'warn':
+                warnings.append((label, _fv.current_message(widget)))
+
+        # Property fields (MaxTorque, MaxRPM, etc.)
+        for key, widget in self.property_widgets.items():
+            _check(format_property_name(key), widget)
+
+        # Shop fields (price, weight) — labels match the column titles
+        # the user sees in the form.
+        shop_labels = {
+            'price': 'Price',
+            'weight': 'Weight',
+        }
+        for key, widget in self.shop_widgets.items():
+            label = shop_labels.get(key)
+            if label is None:
+                continue  # unbounded shop field (display_name etc.)
+            _check(label, widget)
+
+        # Synthetic creator inputs (only present in creator mode).
+        _check('Peak Torque RPM', self.peak_torque_rpm_input)
+        _check('Max HP',          self.max_hp_input)
+        _check('Peak HP RPM',     self.peak_hp_rpm_input)
+
+        return {'errors': errors, 'warnings': warnings}
 
     def get_changed_payload(self) -> Dict[str, Any]:
         if not self.part:

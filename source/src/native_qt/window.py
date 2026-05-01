@@ -1801,6 +1801,14 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         if not payload:
             self.set_status("No changes to save.")
             return
+        # Pre-flight input validation. Same gate as the Engine Creator
+        # uses — out-of-safe-range values are blocked, unusual values
+        # prompt for confirmation. Only run when there's something to
+        # validate (skipping for non-engine parts that have no bounds
+        # is handled inside validation_summary).
+        from .creator import _confirm_validation
+        if not _confirm_validation(self, self.editor_form):
+            return
         payload["expected_version"] = self.current_part.get("state_version", self.live_state_version)
         part_path = self.current_part.get("path", "")
         part_name = str(self.current_part.get("name") or "part")

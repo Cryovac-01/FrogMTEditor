@@ -5,6 +5,46 @@ from .theme import *
 from .widgets import TemplateListDelegate
 from .forms import PartEditorForm
 
+
+def _confirm_validation(parent: QtWidgets.QWidget,
+                        form: PartEditorForm) -> bool:
+    """Run the form's pre-flight input check before a save.
+
+    Returns True if the save should proceed, False otherwise.
+
+    Errors → modal blocking dialog listing every bad field; save aborts.
+    Warnings → confirmation dialog listing the unusual values; save
+    proceeds only if the user clicks Yes.
+    """
+    summary = form.validation_summary()
+    errors = summary.get('errors') or []
+    warnings = summary.get('warnings') or []
+
+    if errors:
+        body = "\n".join(f"  • {label}: {msg}" for label, msg in errors)
+        QtWidgets.QMessageBox.critical(
+            parent,
+            APP_NAME,
+            "Some inputs are out of the safe range and would crash or "
+            "freeze the game in-game. Fix these before saving:\n\n"
+            f"{body}",
+        )
+        return False
+
+    if warnings:
+        body = "\n".join(f"  • {label}: {msg}" for label, msg in warnings)
+        answer = QtWidgets.QMessageBox.question(
+            parent,
+            APP_NAME,
+            "Some inputs are outside their typical range. They are "
+            "allowed but may produce unexpected behaviour. Save anyway?\n\n"
+            f"{body}",
+        )
+        if answer != QtWidgets.QMessageBox.StandardButton.Yes:
+            return False
+
+    return True
+
 class CreatorCatalogSidebar(QtWidgets.QFrame):
     template_selected = QtCore.Signal(dict)
 
@@ -780,6 +820,13 @@ class CreatorWorkspace(QtWidgets.QWidget):
             )
             if answer != QtWidgets.QMessageBox.StandardButton.Yes:
                 return
+
+        # Pre-flight input validation. Hard errors abort the save with
+        # a list of bad fields; warnings prompt for confirmation but
+        # allow the user to proceed if they really mean it.
+        if not _confirm_validation(self, self.form):
+            return
+
         expected_version = self.app.latest_live_state_version or self.live_version or self.app.live_state_version
         if self.part_type == "engine":
             shop = self.form.collect_shop_values()
