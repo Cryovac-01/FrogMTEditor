@@ -70,6 +70,14 @@ TIRE_VEHICLE_TYPE_CHOICES = [
 
 class PartEditorForm(QtWidgets.QWidget):
     changed = QtCore.Signal()
+    # Emitted when the user changes Fuel Type to a value that requires
+    # a different binary donor (e.g. Gas/Diesel <-> Electric).
+    # Args: new_donor_part_path (e.g. "vanilla/Engine/Electric_300HP"),
+    #       intended_fuel_type_key (e.g. "electric").
+    # The owning workspace decides whether to confirm with the user
+    # (when the form has unsaved property edits) and reload, or revert
+    # the combo via revert_fuel_type_combo() if the user cancels.
+    donor_change_requested = QtCore.Signal(str, str)
 
     def __init__(
         self,
@@ -104,6 +112,12 @@ class PartEditorForm(QtWidgets.QWidget):
         # in response to the Fuel Type combo, e.g. EV-only properties
         # show only when Electric is selected.
         self.property_row_widgets: Dict[str, QtWidgets.QWidget] = {}
+        # Fuel-type swap support: remember the last successfully-applied
+        # value so we can restore it if the user cancels a donor swap,
+        # and a flag to suppress our handler during programmatic combo
+        # updates (revert / set_fuel_type).
+        self._previous_fuel_type: str = ""
+        self._suppress_fuel_handler: bool = False
 
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -155,6 +169,8 @@ class PartEditorForm(QtWidgets.QWidget):
         self.vehicle_type_combo = None
         self.fuel_type_combo = None
         self.property_row_widgets = {}
+        self._previous_fuel_type = ""
+        self._suppress_fuel_handler = False
         self._clear_content()
 
         frame = QtWidgets.QFrame()
@@ -285,15 +301,17 @@ class PartEditorForm(QtWidgets.QWidget):
                 combo.setCurrentIndex(i)
                 break
         self._connect_widget(combo)
-        # Re-apply property visibility every time the user picks a
-        # different fuel type. Hooked here (not _connect_widget) so
-        # we run our own logic in addition to the generic 'changed'
-        # signal that _connect_widget wires up.
-        combo.currentIndexChanged.connect(self._apply_fuel_type_visibility)
+        # Hook our handler that decides whether to just toggle row
+        # visibility (Gas <-> Diesel — same binary donor) or request
+        # a donor swap (Gas/Diesel <-> Electric — different binary
+        # layout). Hooked here (not via _connect_widget) so we run
+        # our own logic in addition to the generic 'changed' signal.
+        combo.currentIndexChanged.connect(self._handle_fuel_type_change)
         form.addRow(label, combo)
         self.fuel_type_combo = combo
         self.shop_widgets["fuel_type"] = combo
         self.shop_kinds["fuel_type"] = "combo_data"
+        self._previous_fuel_type = target_key
 
     def _apply_fuel_type_visibility(self) -> None:
         """Hide EV-only property rows when the Fuel Type combo is set
@@ -307,6 +325,68 @@ class PartEditorForm(QtWidgets.QWidget):
             wrapper = self.property_row_widgets.get(prop_key)
             if wrapper is not None:
                 wrapper.setVisible(is_electric)
+
+    def _handle_fuel_type_change(self) -> None:
+        """Called when the Fuel Type combo's selection changes. If the
+        new fuel type is structurally compatible with the current
+        engine binary (Gas <-> Diesel, both ICE), just retoggle row
+        visibility. If the new fuel type needs a different binary
+        donor (Gas/Diesel <-> Electric), emit donor_change_requested
+        so the workspace can confirm with the user and reload."""
+        if self.fuel_type_combo is None or self._suppress_fuel_handler:
+            return
+        new_fuel = str(self.fuel_type_combo.currentData() or '')
+        # The current engine's nature comes from its loaded metadata.
+        # is_ev=True means the binary has EV property slots; False
+        # means ICE slots. A donor swap is required iff this differs
+        # from the new fuel selection.
+        metadata = (self.part or {}).get("metadata") or {}
+        current_is_ev = bool(metadata.get("is_ev"))
+        new_is_ev = (new_fuel == "electric")
+        if current_is_ev == new_is_ev:
+            # Same binary layout works — just retoggle visibility and
+            # remember the new fuel type for any future cancel-revert.
+            self._previous_fuel_type = new_fuel
+            self._apply_fuel_type_visibility()
+            return
+        # Need a different binary donor. Pick a sensible default vanilla
+        # engine for the new family and let the workspace handle the
+        # confirm / fetch / reload dance.
+        target_donor = "Electric_300HP" if new_is_ev else "HeavyDuty_440HP"
+        self.donor_change_requested.emit(
+            f"vanilla/Engine/{target_donor}", new_fuel
+        )
+
+    def has_property_edits(self) -> bool:
+        """True iff the user has changed any editable property widget
+        from its loaded original value. Ignores shop / vehicle-type /
+        fuel-type combos so toggling them doesn't count as 'edits'.
+        Used by the workspace to decide whether to confirm before
+        clobbering values during a donor swap."""
+        if not self.part:
+            return False
+        for key, widget in self.property_widgets.items():
+            meta = self.prop_meta.get(key) or {}
+            if not meta.get("editable"):
+                continue
+            if widget.text() != self.original_props.get(key, ""):
+                return True
+        return False
+
+    def revert_fuel_type_combo(self) -> None:
+        """Restore the Fuel Type combo to its previous successfully-
+        applied value without re-triggering the change handler. Called
+        by the workspace after the user cancels a donor swap."""
+        if self.fuel_type_combo is None:
+            return
+        self._suppress_fuel_handler = True
+        try:
+            for i in range(self.fuel_type_combo.count()):
+                if self.fuel_type_combo.itemData(i) == self._previous_fuel_type:
+                    self.fuel_type_combo.setCurrentIndex(i)
+                    break
+        finally:
+            self._suppress_fuel_handler = False
 
     def _add_tire_vehicle_type_entry(self, form: QtWidgets.QFormLayout, current_value: str = '') -> None:
         """Add a Vehicle Type dropdown for tire creation."""

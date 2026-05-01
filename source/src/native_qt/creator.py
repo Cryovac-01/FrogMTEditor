@@ -468,6 +468,11 @@ class CreatorWorkspace(QtWidgets.QWidget):
         )
         self.form.changed.connect(self.changed.emit)
         self.form.changed.connect(self._refresh_status)
+        # When the user picks a Fuel Type that needs a different binary
+        # donor (Gas/Diesel <-> Electric), the form asks us to swap
+        # donors. We confirm with the user if there are unsaved property
+        # edits, then refetch + reload.
+        self.form.donor_change_requested.connect(self._handle_donor_change_request)
         self.form_holder_layout.addWidget(self.form)
 
     def clear_mode(self) -> None:
@@ -593,6 +598,50 @@ class CreatorWorkspace(QtWidgets.QWidget):
         self.create_button.setEnabled(True)
         self._set_summary()
         self._refresh_status()
+
+    def _handle_donor_change_request(self, target_path: str, intended_fuel_type: str) -> None:
+        """Form is asking us to swap donors because the user picked a
+        Fuel Type that the current binary doesn't support (Gas/Diesel
+        <-> Electric). Confirm with the user if they have unsaved
+        property edits, then fetch the new donor and reload."""
+        if self.form is None:
+            return
+        if self.form.has_property_edits():
+            answer = QtWidgets.QMessageBox.question(
+                self,
+                APP_NAME,
+                "Switching to a different fuel type requires reloading the "
+                "form using a different donor engine. Your current property "
+                "values will be replaced with the new donor's defaults.\n\n"
+                "Continue?",
+                QtWidgets.QMessageBox.StandardButton.Yes
+                | QtWidgets.QMessageBox.StandardButton.Cancel,
+                QtWidgets.QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QtWidgets.QMessageBox.StandardButton.Yes:
+                self.form.revert_fuel_type_combo()
+                return
+
+        detail = self.service.get_part_detail(target_path)
+        if not detail or detail.get("error"):
+            QtWidgets.QMessageBox.critical(
+                self, APP_NAME,
+                f"Could not load donor '{target_path}': "
+                f"{(detail or {}).get('error', 'unknown error')}",
+            )
+            self.form.revert_fuel_type_combo()
+            return
+
+        # Inject the user's intended fuel_type into creation_inputs so
+        # the reloaded form's combo lands on the user's pick instead of
+        # the donor's default heuristic. (For Diesel via an ICE donor
+        # the heuristic would default to Gas, losing the user's intent.)
+        metadata = detail.setdefault("metadata", {})
+        creation_inputs = dict(metadata.get("creation_inputs") or {})
+        creation_inputs["fuel_type"] = intended_fuel_type
+        metadata["creation_inputs"] = creation_inputs
+
+        self.load_part(detail, row=None)
 
     def _set_summary(self) -> None:
         if self.part_type == "engine":
