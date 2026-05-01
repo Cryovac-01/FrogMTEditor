@@ -1477,9 +1477,11 @@ def _register_engine_datatable_entry(ua: bytes, ue: bytes, engine_name: str,
     TMap inside the row tail is rewritten to match the user's pick.
     Empty dict -> count=0 (engine unlocks at Driver level 1, vanilla
     default). Missing CL_* names are appended to the .uasset name
-    table on the fly. Donors whose existing TMap is empty cannot be
-    located by the offset scanner — in that case the rewrite is
-    skipped and the donor's level requirement (if any) is inherited.
+    table on the fly. The locator handles both populated-TMap donors
+    (CL_* anchor) and empty-TMap donors (FString anchor on the
+    GameplayTagQuery description); if neither anchor finds a
+    plausible position, a ValueError is raised rather than silently
+    dropping the user's selection.
     """
     from parsers.uasset_engines_dt import (
         get_fname_index, add_row_key, add_engine_import,
@@ -1558,15 +1560,16 @@ def _register_engine_datatable_entry(ua: bytes, ue: bytes, engine_name: str,
         if did_rewrite:
             patched_tail = rewritten_tail
         else:
-            # Donor had empty LevelRequirementToBuy and locator couldn't
-            # anchor a position. Falling back to donor's value (which is
-            # also empty -> "unlocked by default"). Worth surfacing so a
-            # future change can implement the field-walk approach.
-            logger.info(
-                "level_requirements ignored for engine '%s': donor row "
-                "had no existing LevelRequirementToBuy entry to anchor "
-                "the rewrite. Falling back to donor's empty TMap.",
-                engine_name,
+            # The locator has two anchor strategies that together
+            # cover every vanilla donor row in the Engines DataTable
+            # (verified by sweep: 36/36). If we still couldn't find
+            # an LR position, the donor row is exotic enough that we
+            # shouldn't silently drop the user's selection — surface
+            # it as an error so a bug report has actionable context.
+            raise ValueError(
+                f"Could not locate LevelRequirementToBuy bytes in "
+                f"donor row for engine '{engine_name}'. Pick a "
+                f"different donor or report this as a bug."
             )
 
     new_row = build_row_from_template(

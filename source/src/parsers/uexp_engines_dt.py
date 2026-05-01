@@ -467,58 +467,55 @@ def find_level_requirement_section(tail: bytes, cl_name_indices: dict) -> tuple:
     """Locate the LevelRequirementToBuy TMap bytes inside a row tail.
 
     The Engines DataTable rows use UNTAGGED USTRUCT serialization
-    (the property names like 'MapProperty' aren't in the .uasset name
+    (the property name 'MapProperty' isn't in the .uasset name
     table). LevelRequirementToBuy is field 20 on FVehiclePartRow and
     serialises as: ``[NumElements: int32] [Key + Value]*``
     where each Key is an 8-byte FName (TEnumAsByte<EMTCharacterLevelType>
     serialised as named enum) and each Value is an int32 level.
 
-    Strategy: scan for the first 8-byte sequence whose first int32 is
-    a known CL_* FName index AND whose suffix int32 is 0 (FName number).
-    That FName is the FIRST entry's key. The 4 bytes immediately before
-    are the NumElements count. Walk forward NumElements * 12 bytes to
-    find the section end.
+    The row tail isn't strictly 4-byte aligned — bytes can land at any
+    offset depending on the upstream TArray<EnumByte> field sizes.
+    So we scan at 1-byte stride.
 
-    Limitation: only handles donors that have at least ONE existing
-    LevelRequirementToBuy entry. For empty-TMap donors (Bikes,
-    Electric_*, Bus_140HP, etc.) we'd need to walk all preceding
-    fixed-layout fields to find the count int32 — deferred for now.
+    Two-stage anchor strategy:
 
-    Args:
-        tail: Row tail bytes (from row['tail_start'] to row_end).
-        cl_name_indices: Dict mapping CL_* FName text -> FName index.
-            Pass the indices for any CL_* names present in the
-            donor's .uasset (look them up via get_fname_index).
+      1. CL_* FName scan. If the donor has at least one existing
+         entry, the first 8-byte sequence (CL_idx, 0) tells us where
+         the entries begin; the 4 bytes immediately before are the
+         NumElements count.
+
+      2. GameplayTagQuery FString anchor. When the donor has count=0
+         (no existing entries), there's no CL_* to anchor on. Field 19
+         (VehicleRowGameplayTagQuery) always contains a description
+         FString like " NONE( Vehicle.EV )" or " ALL( ... )". The LR
+         count int32 sits at exactly:
+           FString_length_offset + 4 + length + 4
+         (the trailing +4 is the OTHER FGameplayTagQuery description
+         field which is empty in MT engine rows). The count value at
+         that offset must be 0 for the anchor to be considered valid.
 
     Returns:
         (start_offset, end_offset) of the count+entries bytes, or
-        None if no existing TMap could be located.
+        None if neither anchor finds a plausible position.
     """
+    # ── Stage 1: CL_* anchor (engines with at least one entry) ──
     cl_idx_set = set(cl_name_indices.values())
-    if not cl_idx_set:
-        return None
-    # Scan for the first occurrence of any known CL_* FName in (idx, 0)
-    # form. Step by 4 bytes since FNames are 4-byte-aligned within the
-    # serialised TMap layout.
-    for off in range(0, len(tail) - 12, 4):
-        idx_val = struct.unpack_from('<i', tail, off)[0]
-        num_val = struct.unpack_from('<i', tail, off + 4)[0]
-        if idx_val in cl_idx_set and num_val == 0:
+    if cl_idx_set:
+        for off in range(0, len(tail) - 12):
+            idx_val = struct.unpack_from('<i', tail, off)[0]
+            num_val = struct.unpack_from('<i', tail, off + 4)[0]
+            if idx_val not in cl_idx_set or num_val != 0:
+                continue
             count_off = off - 4
             if count_off < 0:
-                return None
+                continue
             count = struct.unpack_from('<i', tail, count_off)[0]
             if count < 1 or count > 64:
-                # Sanity cap: a TMap with > 64 character-level entries
-                # is almost certainly a coincidental byte pattern, not
-                # a real LevelRequirementToBuy.
                 continue
             end_off = count_off + 4 + count * 12
             if end_off > len(tail):
                 continue
-            # Verify every entry has a CL_* key. Helps filter false
-            # positives where a non-level field happens to encode a
-            # value coinciding with a CL_* index.
+            # All entries must be valid CL_* FNames with num=0
             ok = True
             for i in range(count):
                 e_off = count_off + 4 + i * 12
@@ -529,6 +526,46 @@ def find_level_requirement_section(tail: bytes, cl_name_indices: dict) -> tuple:
                     break
             if ok:
                 return (count_off, end_off)
+
+    # ── Stage 2: GameplayTagQuery FString anchor (empty TMap) ──
+    fs = _find_gametagquery_fstring(tail)
+    if fs is not None:
+        fs_start, fs_len = fs
+        count_off = fs_start + 4 + fs_len + 4
+        if count_off + 4 <= len(tail):
+            count = struct.unpack_from('<i', tail, count_off)[0]
+            # Empty TMap (count=0) is the expected case here.
+            # We still verify by sanity-checking the value is 0;
+            # a non-zero value would mean stage 1 should have caught it.
+            if count == 0:
+                return (count_off, count_off + 4)
+    return None
+
+
+def _find_gametagquery_fstring(tail: bytes) -> tuple:
+    """Scan the row tail for the FGameplayTagQuery description
+    FString (a length-prefixed ASCII string ending in NUL). Returns
+    (length_offset, length_value) or None if not found. Stride is 1
+    byte because tail fields aren't strictly 4-byte aligned."""
+    for off in range(0, len(tail) - 8):
+        ln = struct.unpack_from('<i', tail, off)[0]
+        # GameplayTagQuery descriptions seen in vanilla rows range
+        # 19-60 chars. Cap at 256 for safety.
+        if not (4 <= ln <= 256):
+            continue
+        if off + 4 + ln > len(tail):
+            continue
+        chars = tail[off + 4: off + 4 + ln]
+        # Must end in NUL and be otherwise printable ASCII.
+        if chars[-1] != 0:
+            continue
+        body = chars[:-1]
+        if not all(32 <= b <= 126 for b in body):
+            continue
+        # Must look like a tag query (contains '(' and ')').
+        if 0x28 not in body or 0x29 not in body:
+            continue
+        return (off, ln)
     return None
 
 
