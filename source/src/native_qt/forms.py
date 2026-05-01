@@ -23,6 +23,19 @@ VEHICLE_TYPE_CHOICES = [
     ('Electric Vehicle', 'Electric_300HP'),
 ]
 
+# Engine fuel type choices. The three types Motor Town actually
+# supports. Each entry: (display_label, internal_key).
+# Future use: filter visible properties on the form so gas-only
+# fields (FuelConsumption, IdleThrottle, exhaust audio) and EV-only
+# fields (battery, regen) are hidden when not relevant. For now the
+# selection is just persisted with the engine's creation_inputs so
+# fork / re-edit flows keep the user's choice.
+FUEL_TYPE_CHOICES = [
+    ('Gasoline', 'gas'),
+    ('Diesel',   'diesel'),
+    ('Electric', 'electric'),
+]
+
 # Tire vehicle type choices.
 # Each entry: (display_label, donor_row_name in VehicleParts0).
 # The donor_row_name determines which vehicles can equip the tire.
@@ -70,6 +83,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.max_hp_input: Optional[QtWidgets.QLineEdit] = None
         self.peak_hp_rpm_input: Optional[QtWidgets.QLineEdit] = None
         self.vehicle_type_combo: Optional[QtWidgets.QComboBox] = None
+        self.fuel_type_combo: Optional[QtWidgets.QComboBox] = None
 
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -118,6 +132,8 @@ class PartEditorForm(QtWidgets.QWidget):
         self.peak_torque_rpm_input = None
         self.max_hp_input = None
         self.peak_hp_rpm_input = None
+        self.vehicle_type_combo = None
+        self.fuel_type_combo = None
         self._clear_content()
 
         frame = QtWidgets.QFrame()
@@ -224,6 +240,32 @@ class PartEditorForm(QtWidgets.QWidget):
         self.vehicle_type_combo = combo
         self.shop_widgets["vehicle_type"] = combo
         self.shop_kinds["vehicle_type"] = "combo_data"
+
+    def _add_fuel_type_entry(self, form: QtWidgets.QFormLayout,
+                             current_value: str = '',
+                             default_is_ev: bool = False) -> None:
+        """Add a Fuel Type dropdown for engine creation. Sits right
+        below Vehicle Type. Default selection is derived from the
+        donor when available (EV donors -> Electric, otherwise
+        Gasoline). User-entered value (saved on previous fork) wins
+        over the donor-derived default."""
+        label = QtWidgets.QLabel("Fuel Type")
+        set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
+        combo = QtWidgets.QComboBox()
+        configure_field_control(combo, "editor")
+        for display_label, key in FUEL_TYPE_CHOICES:
+            combo.addItem(display_label, key)
+        # Pick the default: saved value > donor heuristic > Gasoline.
+        target_key = current_value or ('electric' if default_is_ev else 'gas')
+        for i in range(combo.count()):
+            if combo.itemData(i) == target_key:
+                combo.setCurrentIndex(i)
+                break
+        self._connect_widget(combo)
+        form.addRow(label, combo)
+        self.fuel_type_combo = combo
+        self.shop_widgets["fuel_type"] = combo
+        self.shop_kinds["fuel_type"] = "combo_data"
 
     def _add_tire_vehicle_type_entry(self, form: QtWidgets.QFormLayout, current_value: str = '') -> None:
         """Add a Vehicle Type dropdown for tire creation."""
@@ -462,6 +504,11 @@ class PartEditorForm(QtWidgets.QWidget):
             if self.creator_mode:
                 creation_inputs = (metadata.get('creation_inputs') or {})
                 self._add_vehicle_type_entry(form, creation_inputs.get('vehicle_type', ''))
+                self._add_fuel_type_entry(
+                    form,
+                    current_value=creation_inputs.get('fuel_type', ''),
+                    default_is_ev=bool(metadata.get('is_ev')),
+                )
         elif self.part_type == "tire":
             self._add_shop_entry(form, "display_name", "Display Name", shop.get("display_name") or part.get("name") or "")
             self._add_shop_entry(form, "code", "Code", shop.get("code") or "")
@@ -573,6 +620,8 @@ class PartEditorForm(QtWidgets.QWidget):
             payload['_peak_hp_rpm'] = self.peak_hp_rpm_input.text().strip()
         if self.vehicle_type_combo is not None:
             payload['_vehicle_type'] = str(self.vehicle_type_combo.currentData() or '')
+        if self.fuel_type_combo is not None:
+            payload['_fuel_type'] = str(self.fuel_type_combo.currentData() or '')
         return payload
 
     def get_current_property_strings(self) -> Dict[str, str]:

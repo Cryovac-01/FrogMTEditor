@@ -4465,12 +4465,14 @@ def create_engine(data: Dict) -> Dict:
             # Save creation inputs so they persist for fork/re-edit
             import json as _json
             _creation_meta_path = os.path.join(engine_dir, new_name + '.creation.json')
+            _fuel_type = str(data.get('fuel_type') or '').strip()
             try:
                 _json.dump({
                     'peak_torque_rpm': peak_torque_rpm,
                     'max_hp': max_hp,
                     'peak_hp_rpm': peak_hp_rpm,
                     'vehicle_type': vehicle_type or '',
+                    'fuel_type': _fuel_type,
                 }, open(_creation_meta_path, 'w'))
             except Exception:
                 pass  # Non-critical; fork will fall back to empty fields

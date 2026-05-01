@@ -725,6 +725,7 @@ class CreatorWorkspace(QtWidgets.QWidget):
             template_name = str(self.fixed_template.get("name") if self.fixed_template else self.current_detail.get("name") or "").strip()
             props = self.form.collect_property_payload_for_create()
             vehicle_type = props.pop('_vehicle_type', '')
+            fuel_type = props.pop('_fuel_type', '')
             payload = {
                 "template": template_name,
                 "name": name,
@@ -736,6 +737,7 @@ class CreatorWorkspace(QtWidgets.QWidget):
                 "properties": props,
                 "expected_version": expected_version,
                 "vehicle_type": vehicle_type,
+                "fuel_type": fuel_type,
             }
 
             def on_done(result: Optional[Dict[str, Any]], error: Optional[Exception]) -> None:
