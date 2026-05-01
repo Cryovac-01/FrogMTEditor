@@ -54,13 +54,16 @@ PROPERTY_DESCRIPTIONS = {
         "Peak crank torque in N·m (displayed after ÷10,000 conversion from the raw asset value). "
         "This is the single biggest factor in how powerful the engine feels. "
         "Vanilla range: ~12 N·m (Scooter 10 HP) up to ~1,500 N·m (HeavyDuty 540 HP). "
-        "Typical car engines sit between 80–520 N·m. Must be greater than zero for ICE engines."
+        "Typical car engines sit between 80–520 N·m. The editor warns above 2,000 N·m and blocks "
+        "above 50,000 N·m. Must be greater than zero for ICE engines."
     ),
     "MaxRPM": (
         "Maximum operating RPM (redline). Determines how high the engine can rev. "
-        "Vanilla range: 2,500 (heavy diesel) to 21,000 (EV). Typical gas engines: 6,000–8,000. "
-        "Bikes can go up to 13,000. WARNING: below 600 RPM the engine may break in-game; "
-        "heavy diesels below 1,500 RPM are known to freeze."
+        "The editor enforces a hard range of 2,000–14,000 RPM and warns outside 2,800–10,000 "
+        "(below 2,000 most engines break or freeze in-game; above 14,000 the simulation becomes "
+        "unstable). Typical gas engines sit at 6,000–8,000. Sport bikes can legitimately reach "
+        "10,000–13,000. Note: vanilla EV engines ship at 21,000 RPM, which exceeds the editor's "
+        "hard cap — to fork an EV donor you'll need to bring MaxRPM down to ≤14,000 first."
     ),
     "TorqueCurve": (
         "Internal UE5 import reference (read-only). The negative number (e.g. -2) is a package "
@@ -71,32 +74,37 @@ PROPERTY_DESCRIPTIONS = {
     "MotorMaxPower": (
         "EV-only peak motor output in kW (displayed after ÷10,000 conversion). "
         "Vanilla range: 230 kW (Electric 130 HP) to 505 kW (Electric 670 HP). "
+        "The editor warns outside 50–1,000 kW and blocks above 10,000 kW. "
         "This is the primary power stat for electric motors. Must be greater than zero for EVs."
     ),
     "MotorMaxVoltage": (
         "EV-only maximum system voltage in volts (displayed after ÷10,000 conversion). "
         "Vanilla range: 200 V to 670 V. Higher voltage generally pairs with higher power output. "
-        "Changing this affects the motor's operating characteristics."
+        "The editor warns outside 100–1,000 V and blocks outside 12–10,000 V."
     ),
     "MotorMaxRPM": (
         "Motor speed ceiling for EV layouts that expose it. "
-        "If present, this caps the motor's maximum rotational speed independently of MaxRPM."
+        "If present, this caps the motor's maximum rotational speed independently of MaxRPM. "
+        "The editor warns outside 2,500–25,000 RPM and blocks outside 600–50,000 RPM. "
+        "Note: the MaxRPM field has a separate, tighter cap of 14,000."
     ),
     "MaxRegenTorqueRatio": (
-        "EV regenerative braking strength as a ratio (0.0–1.0). "
+        "EV regenerative braking strength as a ratio. "
         "Vanilla value: 0.3 on all stock EVs. Higher values give stronger regen braking. "
-        "Acceptable range: 0.0 (no regen) to 1.0 (maximum regen). Values above 1.0 are untested."
+        "The editor warns above 1.0 (untested territory) and blocks above 5.0."
     ),
 
     # ── Engine: Start and Idle ────────────────────────────────────────
     "StarterTorque": (
         "Torque applied by the starter motor while cranking the engine, in raw asset units. "
         "Vanilla range: 20,000 (bikes/scooters) to 3,000,000 (heavy diesel). "
-        "Typical gas engines: 200,000. Too low and the engine won't crank reliably."
+        "Typical gas engines: 200,000. The editor warns outside 10,000–3,500,000 and blocks "
+        "above 10,000,000. Too low and the engine won't crank reliably."
     ),
     "StarterRPM": (
         "Target RPM the starter tries to reach before the engine catches and starts running. "
         "Vanilla value: 1,500 on diesels and modern bikes. Must be lower than MaxRPM. "
+        "The editor warns outside 500–3,000 and blocks outside 100–20,000. "
         "Not present on all layouts — legacy bike and compact layouts may omit it."
     ),
     "IdleThrottle": (
@@ -105,18 +113,20 @@ PROPERTY_DESCRIPTIONS = {
         "Compact/standard gas: ~0.002–0.005 (very small fractional values). "
         "Modern bikes: ~0.0002. Diesels: ~0.017. "
         "DANGER: on compact layouts, values above 1.0 cause the vehicle to creep forward "
-        "without any throttle input (the retired V6Sport had 480 — do not use values like that)."
+        "without any throttle input (the retired V6Sport had 480 — do not use values like that). "
+        "The editor blocks anything above 1.0 to prevent this failure mode."
     ),
     "BlipThrottle": (
         "Throttle amount used for automatic rev-match blips during downshifts. "
         "Vanilla range: 1.0 (scooter/bike) to 10.0 (V8s). Typical gas engines: 3.0–5.0. "
+        "The editor warns outside 0.5–10.0 and blocks above 50.0. "
         "Higher values make downshift blips more aggressive and audible."
     ),
     "BlipDurationSeconds": (
         "Duration of the rev-match blip in seconds. "
         "Vanilla range: 0.2–0.5 s for gas engines, up to 3.0 s for bikes. "
         "Some older compact layouts store NaN here, which the game treats as a default. "
-        "Acceptable range: 0.1–5.0 s."
+        "The editor warns outside 0.1–3.0 s and blocks above 10.0 s."
     ),
 
     # ── Engine: Friction and Fuel ─────────────────────────────────────
@@ -125,25 +135,29 @@ PROPERTY_DESCRIPTIONS = {
         "Controls how quickly the engine revs up and down — higher = slower response. "
         "Vanilla range: 80 (scooter) to 50,000 (heavy diesel). "
         "Typical gas engines: 1,200–5,200. Bikes: 300–350. EVs: 2,000–3,000. "
-        "Too low makes the engine feel twitchy; too high makes it feel sluggish."
+        "The editor warns outside 80–60,000 and blocks above 100,000. Must be greater than "
+        "zero. Too low makes the engine feel twitchy; too high makes it feel sluggish."
     ),
     "FrictionCoulombCoeff": (
         "Constant mechanical drag from bearings, seals, and baseline friction. "
         "Always present as a positive number — acts as a flat drag regardless of RPM. "
         "Vanilla range: 50 (bikes/EVs) to 2,500,000 (heavy diesel). "
-        "Typical gas engines: 180,000–500,000. Higher values make the engine lose more power to friction."
+        "Typical gas engines: 180,000–500,000. The editor warns outside 50–3,000,000 and "
+        "blocks above 10,000,000. Higher values make the engine lose more power to friction."
     ),
     "FrictionViscosityCoeff": (
         "RPM-dependent drag from oil shear, pumping losses, and windage. "
         "This drag increases with engine speed — higher values punish high-RPM performance. "
         "Vanilla range: 10 (scooter) to 6,000 (heavy diesel). "
-        "Typical gas engines: 450–1,050. Bikes: 330–500. EVs: 100."
+        "Typical gas engines: 450–1,050. Bikes: 330–500. EVs: 100. "
+        "The editor warns outside 10–6,500 and blocks above 20,000."
     ),
     "FuelConsumption": (
         "Base fuel-use scalar. Higher values = more fuel consumed for a given power output. "
         "Vanilla range: 3 (scooter) to 670 (Electric 670 HP — yes, EVs use this too for energy drain). "
         "Typical gas engines: 90–320, roughly correlating with HP. Diesels: 260–540. "
-        "Must be greater than zero or the engine won't consume fuel at all."
+        "The editor warns outside 3–700 and blocks above 10,000. Must be greater than zero "
+        "or the engine won't consume fuel at all."
     ),
     "FuelType": (
         "Fuel type enum used by the game. Determines which fuel the engine uses at gas stations. "
@@ -156,26 +170,27 @@ PROPERTY_DESCRIPTIONS = {
         "Explicit heat-generation term. Only present on some layouts (standard V8s, bikes). "
         "Vanilla bikes: ~1.15–1.17. When present, this affects engine temperature buildup. "
         "The template policy keeps this low where supported and structurally absent otherwise. "
-        "Acceptable range: 0.0–5.0 for most use cases."
+        "The editor warns above 5.0 and blocks above 100.0."
     ),
     "AfterFireProbability": (
         "Decel pop / afterfire (backfire) probability scalar. "
         "Controls how likely the engine is to produce popping sounds on deceleration. "
         "Vanilla: 1.0 on engines that have it (V8s, bikes). 0.0 = no pops, 1.0 = frequent pops. "
-        "Values above 1.0 are untested but may increase frequency further."
+        "The editor warns above 1.0 (untested but may increase frequency further) and blocks "
+        "above 10.0."
     ),
 
     # ── Engine: Diesel-Specific ───────────────────────────────────────
     "IntakeSpeedEfficiency": (
         "Diesel/heavy-duty airflow efficiency term (reverse-engineered). "
         "Appears to affect breathing and power delivery under speed and load. "
-        "Vanilla value: 1.0 on all observed diesels. Safe range: 0.5–2.0. "
-        "Deviating far from 1.0 may produce unpredictable power behavior."
+        "Vanilla value: 1.0 on all observed diesels. The editor warns outside 0.5–2.0 and "
+        "blocks above 20.0. Deviating far from 1.0 may produce unpredictable power behavior."
     ),
     "MaxJakeBrakeStep": (
         "Maximum jake-brake (engine brake) strength in discrete steps. Diesel-only. "
         "Vanilla value: 3 on all observed heavy-duty diesels. "
-        "Integer values only. Range: 0 (no jake brake) to 5. "
+        "Integer values only. The editor warns above 5 and blocks above 50. "
         "Higher values allow stronger engine-braking when activated in-game."
     ),
     "EngineType": (

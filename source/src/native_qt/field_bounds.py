@@ -179,7 +179,10 @@ PROPERTY_BOUNDS: Dict[str, FieldBounds] = {
 
     # Start and idle
     'StarterTorque': FieldBounds(
-        typical_min=10_000, typical_max=600_000,
+        # Widened typical_max to encompass vanilla heavy diesels
+        # (3,000,000) so opening an HD donor doesn't warn on the
+        # vanilla value the user hasn't even touched yet.
+        typical_min=10_000, typical_max=3_500_000,
         hard_min=0, hard_max=10_000_000,
         kind='float',
     ),
@@ -209,17 +212,21 @@ PROPERTY_BOUNDS: Dict[str, FieldBounds] = {
 
     # Friction & fuel
     'Inertia': FieldBounds(
-        typical_min=80, typical_max=10_000,
+        # Heavy diesels reach 50,000 in vanilla — typical_max widened
+        # so an HD donor doesn't false-warn on its stock value.
+        typical_min=80, typical_max=60_000,
         hard_min=1, hard_max=100_000,
         kind='float', zero_ok=False,
     ),
     'FrictionCoulombCoeff': FieldBounds(
-        typical_min=50, typical_max=500_000,
+        # Heavy diesels reach 2,500,000 in vanilla.
+        typical_min=50, typical_max=3_000_000,
         hard_min=0, hard_max=10_000_000,
         kind='float',
     ),
     'FrictionViscosityCoeff': FieldBounds(
-        typical_min=10, typical_max=1500,
+        # Heavy diesels reach 6,000 in vanilla.
+        typical_min=10, typical_max=6_500,
         hard_min=0, hard_max=20_000,
         kind='float',
     ),
