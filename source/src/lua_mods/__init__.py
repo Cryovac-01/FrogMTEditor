@@ -128,6 +128,7 @@ def _ensure_loaded() -> None:
     from . import engine_volume                 # noqa: F401
     from . import production_storage_boost      # noqa: F401
     from . import contract_payment_boost        # noqa: F401
+    from . import free_depot_construction       # noqa: F401
 
 
 # Shared default output directory. Mirrors what cargo_scaling_deployer used
