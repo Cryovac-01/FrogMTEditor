@@ -760,14 +760,42 @@ class CreatorWorkspace(QtWidgets.QWidget):
         if grip is not None:
             summary_parts.append(f"{format_compact_metric(grip)} G grip")
             details.append(f"Estimated grip: {format_number(grip)} G")
+            # Explain the grip formula so the user can predict how
+            # their edits will move the number. This is the same
+            # formula `estimate_tire_grip_g` uses in native_services.
+            details.append("")
+            details.append(
+                "Formula:  Estimated G  =  Cornering Stiffness  +  "
+                "(Camber Stiffness ÷ 2)"
+            )
+            details.append(
+                "Example:  CorneringStiffness = 0.85, CamberStiffness = "
+                "0.30 → 0.85 + 0.15 = 1.00 G"
+            )
+            details.append(
+                "Camber Stiffness counts at half weight because it only "
+                "kicks in when the wheel is actively cambered into a "
+                "corner. Tires that don't expose Camber Stiffness on "
+                "their layout treat it as 0 — the estimate is just "
+                "Cornering Stiffness on its own."
+            )
+            details.append(
+                "Note: this is the editor's quick estimate, not the "
+                "exact in-game peak. Real grip also depends on load, "
+                "temperature, surface, and the tire's slip-stiffness "
+                "fields, which the simple formula doesn't model."
+            )
+        # Coverage count is included in the compact summary at the top
+        # but no longer rebroadcast in the details body — the row
+        # count and the missing-field list were noise. The fields
+        # not present in this layout are simply hidden from the form
+        # (see _add_property_row) so the user only ever sees what
+        # they can actually edit.
         if coverage:
             summary_parts.append(f"{coverage['property_count']}/{coverage['known_count']} fields")
-            details.append(f"Editable fields on this layout: {coverage['property_count']} of {coverage['known_count']} known tire fields.")
-            if coverage["missing_known"]:
-                details.append("Missing on this layout: " + ", ".join(format_property_name(name) for name in coverage["missing_known"]))
-        self._set_status("  •  ".join(summary_parts) if summary_parts else "Coverage ready.", "warning" if coverage and coverage.get("missing_known") else "ok")
+        self._set_status("  •  ".join(summary_parts) if summary_parts else "Coverage ready.", "ok")
         self.details_text.setPlainText("\n".join(details))
-        if coverage and coverage.get("missing_known"):
+        if details:
             self.details_text.hide()
             self.details_toggle.setText("Show Details")
             self.details_toggle.show()
