@@ -241,19 +241,25 @@ PROPERTY_DESCRIPTIONS = {
         "drop this on purpose for slide-friendliness."
     ),
     "LoadRating": (
-        "How much weight the tire is rated to carry per wheel (in "
-        "the game's internal units, not real-world kg). Mostly "
-        "informational — the game doesn't catastrophically punish "
-        "exceeding this, but heavy loads on under-rated tires "
-        "compress the suspension and increase wear. Match the "
-        "donor's value unless you know what you're doing."
+        "Internal load-related scalar. The exact gameplay effect "
+        "isn't publicly documented, and vanilla values are wildly "
+        "inconsistent across tires (BasicTire = 1.0, Motorcycle = "
+        "25,000, HeavyDuty = 600–800), which is why the editor no "
+        "longer shows a 'N' (Newtons) unit next to it — those values "
+        "clearly aren't real-world Newtons. STRONGLY recommend "
+        "matching the donor unless you're experimenting and willing "
+        "to test in-game. There's no reliable rule of thumb for "
+        "this field."
     ),
     "MaxLoad": (
-        "Hard upper limit on the load the tire can carry before "
-        "behaviour breaks down (severe grip loss, possible blowout "
-        "on heavy impacts). Set this above your expected vehicle "
-        "weight per wheel, with margin. Match the donor unless you're "
-        "explicitly building a heavy-duty tire."
+        "Internal load-cap scalar. Like LoadRating, the precise "
+        "gameplay effect isn't documented and vanilla values don't "
+        "follow any consistent pattern (Motorcycle Rear = 0.003, "
+        "BasicTire = 180,000, HeavyDuty = 200–400). It's NOT a "
+        "real-world weight — the conventional 'set above expected "
+        "load' rule doesn't apply because the units are abstract. "
+        "STRONGLY recommend matching the donor; tweak only if you "
+        "can A/B test the effect in-game."
     ),
     "MaxSpeed": (
         "Top speed the tire is rated for, in the game's internal "

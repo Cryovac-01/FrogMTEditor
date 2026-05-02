@@ -70,8 +70,13 @@ TIRE_INTEGER_LIKE_PROPERTIES = frozenset({
     'MaxSpeed',
 })
 TIRE_PROPERTY_UNITS = {
-    'LoadRating': 'N',
-    'MaxLoad': 'N',
+    # LoadRating / MaxLoad were originally annotated 'N' (Newtons),
+    # but vanilla values across tires range from 0.003 (Motorcycle
+    # rear MaxLoad) to 180,000 (BasicTire MaxLoad) — those aren't
+    # Newtons, they're some internal scalar whose semantics aren't
+    # publicly documented. Showing 'N' next to the field misled
+    # users into thinking they could reason about it as real-world
+    # weight. Left blank until ground truth is known.
     'GripMultiplier': '%',
 }
 
