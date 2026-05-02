@@ -433,6 +433,80 @@ class VolumeOffsetWidget(QtWidgets.QWidget):
         self._refresh_label(v)
 
 
+class TireVehicleClassesWidget(QtWidgets.QWidget):
+    """Multi-select for the vehicle classes a tire should appear in.
+
+    Each ticked box maps to a donor row from ``TIRE_VEHICLE_TYPE_CHOICES``
+    in the VehicleParts0 DataTable. The server registers one row per
+    selected class (same FName, distinct fname_number), so the modded
+    tire appears in the modification list of every chosen vehicle
+    class.
+
+    Why this replaces the old single-pick combo:
+    Vanilla MT stores multiple VehicleParts0 rows per tire asset (one
+    per vehicle class the tire is compatible with). The previous
+    "Vehicle Type" combo cloned only ONE donor row, so the resulting
+    tire only appeared on that one class — giving the impression
+    that "modded tires don't show up."
+
+    Round-trips through ``to_payload()`` (returns a list of donor
+    names) and ``from_payload()`` so the saved selection restores
+    on fork/edit.
+    """
+    changed = QtCore.Signal()
+
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
+        super().__init__(parent)
+        self._checkboxes: List[Tuple[str, QtWidgets.QCheckBox]] = []
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        hint = QtWidgets.QLabel(
+            "Pick every vehicle class the tire should show up on. "
+            "One row is added to the VehicleParts0 DataTable per tick."
+        )
+        hint.setWordWrap(True)
+        set_label_kind(hint, "fieldDesc")
+        layout.addWidget(hint)
+
+        # Skip the first 'Auto' entry — it doesn't make sense in a
+        # multi-select context (the server can't auto-detect when
+        # the user has explicitly selected a list).
+        for display_label, donor_name in TIRE_VEHICLE_TYPE_CHOICES:
+            if not donor_name:
+                continue  # 'Auto (from template)'
+            cb = QtWidgets.QCheckBox(display_label)
+            cb.toggled.connect(lambda _checked=False, s=self: s.changed.emit())
+            layout.addWidget(cb)
+            self._checkboxes.append((donor_name, cb))
+
+    # ------------------------------------------------------------------
+    def to_payload(self) -> List[str]:
+        """Return the list of donor names corresponding to ticked boxes."""
+        return [donor for donor, cb in self._checkboxes if cb.isChecked()]
+
+    def from_payload(self, value: Optional[List[str]]) -> None:
+        """Restore tick state from a saved list. None / empty / a
+        legacy string value (single donor) are all handled."""
+        if value is None:
+            checked: set = set()
+        elif isinstance(value, str):
+            checked = {value} if value else set()
+        else:
+            checked = set(value)
+        for donor, cb in self._checkboxes:
+            was_blocked = cb.blockSignals(True)
+            try:
+                cb.setChecked(donor in checked)
+            finally:
+                cb.blockSignals(was_blocked)
+
+    def has_any_checked(self) -> bool:
+        return any(cb.isChecked() for _d, cb in self._checkboxes)
+
+
 class PartEditorForm(QtWidgets.QWidget):
     changed = QtCore.Signal()
     # Emitted when the user changes Fuel Type to a value that requires
@@ -476,6 +550,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.volume_offset_widget: Optional[VolumeOffsetWidget] = None
         self.original_volume_offset: Optional[int] = None
         self.curve_preview: Optional[_InlineCurvePreview] = None
+        self.tire_vehicle_classes_widget: Optional[TireVehicleClassesWidget] = None
         # Row-wrapper widgets keyed by property name. Used to hide /
         # show whole rows (label + input + helper text) dynamically
         # in response to the Fuel Type combo, e.g. EV-only properties
@@ -541,6 +616,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.volume_offset_widget = None
         self.original_volume_offset = None
         self.curve_preview = None
+        self.tire_vehicle_classes_widget = None
         self.property_row_widgets = {}
         self._previous_fuel_type = ""
         self._suppress_fuel_handler = False
@@ -825,24 +901,30 @@ class PartEditorForm(QtWidgets.QWidget):
         finally:
             self._suppress_fuel_handler = False
 
-    def _add_tire_vehicle_type_entry(self, form: QtWidgets.QFormLayout, current_value: str = '') -> None:
-        """Add a Vehicle Type dropdown for tire creation."""
-        label = QtWidgets.QLabel("Vehicle Type")
+    def _add_tire_vehicle_type_entry(self, form: QtWidgets.QFormLayout,
+                                       current_value: Any = None) -> None:
+        """Multi-select for the vehicle classes a tire should appear in.
+
+        Replaces the legacy single-pick combo. Vanilla MT uses one
+        VehicleParts0 row per (tire, vehicle_class) pair — the
+        previous one-row design only matched the single class of the
+        chosen donor, so modded tires "didn't appear" on most
+        vehicles. The multi-select lets the user tick every class
+        the tire should show up on; the server creates one
+        VehicleParts0 row per tick, all pointing at the same tire
+        asset.
+
+        ``current_value`` accepts both the new list-of-donors format
+        AND the legacy single-string ``vehicle_type`` so old
+        ``.creation.json`` sidecars round-trip cleanly.
+        """
+        label = QtWidgets.QLabel("Vehicle Compatibility")
         set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
-        combo = ArrowComboBox()
-        configure_field_control(combo, "editor")
-        for display_label, donor_name in TIRE_VEHICLE_TYPE_CHOICES:
-            combo.addItem(display_label, donor_name)
-        if current_value:
-            for i in range(combo.count()):
-                if combo.itemData(i) == current_value:
-                    combo.setCurrentIndex(i)
-                    break
-        self._connect_widget(combo)
-        form.addRow(label, combo)
-        self.vehicle_type_combo = combo
-        self.shop_widgets["vehicle_type"] = combo
-        self.shop_kinds["vehicle_type"] = "combo_data"
+        widget = TireVehicleClassesWidget(self)
+        widget.from_payload(current_value)
+        widget.changed.connect(self.changed.emit)
+        form.addRow(label, widget)
+        self.tire_vehicle_classes_widget = widget
 
     def _add_property_row(self, parent_layout: QtWidgets.QLayout, key: str, prop: Dict[str, Any]) -> None:
         name_label = QtWidgets.QLabel(format_property_name(key))
@@ -1146,7 +1228,13 @@ class PartEditorForm(QtWidgets.QWidget):
             self._add_shop_entry(form, "weight", "Weight (kg)", format_number(shop.get("weight")))
             if self.creator_mode:
                 creation_inputs = (metadata.get('creation_inputs') or {})
-                self._add_tire_vehicle_type_entry(form, creation_inputs.get('vehicle_type', ''))
+                # Prefer the new multi-select payload key
+                # (vehicle_classes); fall back to the legacy single
+                # vehicle_type so old sidecars round-trip cleanly.
+                _saved_classes = (creation_inputs.get('vehicle_classes')
+                                  or creation_inputs.get('vehicle_type')
+                                  or [])
+                self._add_tire_vehicle_type_entry(form, _saved_classes)
 
         self.content_layout.addWidget(identity_group)
 
@@ -1546,11 +1634,22 @@ class PartEditorForm(QtWidgets.QWidget):
             # MasterVolume override on the engine's sound data asset
             # (1.0 + offset * 0.04).
             payload['_volume_offset'] = str(int(self.volume_offset_widget.to_payload()))
+        if self.tire_vehicle_classes_widget is not None:
+            # Multi-select replacement for the legacy `_vehicle_type`
+            # tire field. JSON-encoded list of donor names so the
+            # server can iterate and register one VehicleParts0 row
+            # per checked class.
+            import json as _json
+            payload['_vehicle_classes'] = _json.dumps(
+                self.tire_vehicle_classes_widget.to_payload()
+            )
         # Strip thousands-separator commas from every value so users
         # can write "12,000" naturally and the server parses it fine.
-        # Skip _level_requirements: it's JSON, commas are syntax there.
+        # Skip _level_requirements + _vehicle_classes: both are JSON,
+        # commas are syntax there.
+        _no_strip_keys = {'_level_requirements', '_vehicle_classes'}
         payload = {
-            k: (v.replace(',', '') if (isinstance(v, str) and k != '_level_requirements') else v)
+            k: (v.replace(',', '') if (isinstance(v, str) and k not in _no_strip_keys) else v)
             for k, v in payload.items()
         }
         return payload

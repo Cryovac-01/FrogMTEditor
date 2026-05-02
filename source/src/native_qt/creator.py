@@ -877,6 +877,11 @@ class CreatorWorkspace(QtWidgets.QWidget):
         shop = self.form.collect_shop_values()
         props = self.form.collect_property_payload_for_create()
         vehicle_type = props.pop('_vehicle_type', '')
+        # New multi-select for tires; JSON-encoded list of donor names.
+        # The server parses it and registers one VehicleParts0 row
+        # per entry. Falls back to the legacy single vehicle_type
+        # field when not present.
+        vehicle_classes_json = props.pop('_vehicle_classes', '')
         payload = {
             "template_path": self.current_detail.get("path", ""),
             "name": name,
@@ -887,6 +892,7 @@ class CreatorWorkspace(QtWidgets.QWidget):
             "properties": props,
             "expected_version": expected_version,
             "vehicle_type": vehicle_type,
+            "vehicle_classes_json": vehicle_classes_json,
         }
 
         def on_done(result: Optional[Dict[str, Any]], error: Optional[Exception]) -> None:

@@ -3907,8 +3907,16 @@ def _register_tire_vehicleparts_entry(ua: bytes, ue: bytes, tire_name: str, *,
                                       display_name: str, code: str,
                                       price: int, weight: float,
                                       donor_row: Optional[Dict[str, Any]] = None,
-                                      update_existing: bool = True) -> tuple[bytes, bytes, str]:
-    """Ensure one tire has a matching VehicleParts0 row and asset import."""
+                                      update_existing: bool = True,
+                                      fname_number: int = 0) -> tuple[bytes, bytes, str]:
+    """Ensure one tire has a matching VehicleParts0 row and asset import.
+
+    ``fname_number`` lets the caller register multiple rows with the
+    same row name but distinct numbers — used by the multi-vehicle-
+    class flow where one tire asset gets one row per compatible
+    vehicle class (each row inheriting that class's vehicle filter
+    fields from a different donor).
+    """
     from parsers.uasset_vehicleparts_dt import get_fname_index as get_vp_fname_index
     from parsers.uasset_vehicleparts_dt import append_name_entries, add_part_import, parse_imports
     from parsers.uexp_vehicleparts_dt import build_row_from_template, append_row, find_row_by_key, update_row
@@ -3919,7 +3927,8 @@ def _register_tire_vehicleparts_entry(ua: bytes, ue: bytes, tire_name: str, *,
         raise ValueError(f'Failed to allocate VehicleParts0 FName for {tire_name}')
 
     imports = parse_imports(ua)
-    existing = find_row_by_key(ue, fname_idx=fname_idx, fname_number=0, imports=imports)
+    existing = find_row_by_key(ue, fname_idx=fname_idx,
+                               fname_number=fname_number, imports=imports)
     primary_text = str(code or '').strip() or str(display_name or '').strip() or tire_name
     secondary_text = str(display_name or '').strip()
 
@@ -3930,7 +3939,7 @@ def _register_tire_vehicleparts_entry(ua: bytes, ue: bytes, tire_name: str, *,
             ue = update_row(
                 ue,
                 fname_idx=fname_idx,
-                fname_number=0,
+                fname_number=fname_number,
                 primary_text=primary_text,
                 secondary_text=secondary_text,
                 price=price,
@@ -3965,7 +3974,7 @@ def _register_tire_vehicleparts_entry(ua: bytes, ue: bytes, tire_name: str, *,
     row_bytes = build_row_from_template(
         donor_row,
         fname_idx=fname_idx,
-        fname_number=0,
+        fname_number=fname_number,
         primary_text=primary_text,
         secondary_text=secondary_text,
         price=price,
@@ -4720,6 +4729,28 @@ def create_tire(data: Dict) -> Dict:
     raw_price = data.get('price')
     raw_weight = data.get('weight')
     vehicle_type = str(data.get('vehicle_type') or '').strip() or None
+    # vehicle_classes_json: JSON-encoded list of donor names for the
+    # new multi-select (replaces the legacy single vehicle_type combo).
+    # Vanilla MT uses one VehicleParts0 row per (tire, vehicle_class)
+    # pair; the previous one-row design only matched the donor's
+    # single class, which is why modded tires often "didn't appear"
+    # on most vehicles. The list lets the user pick every class the
+    # tire should show up on; we register one row per entry.
+    import json as _json_for_classes
+    _vehicle_classes_raw = str(data.get('vehicle_classes_json') or '').strip()
+    vehicle_classes: List[str] = []
+    if _vehicle_classes_raw:
+        try:
+            decoded = _json_for_classes.loads(_vehicle_classes_raw)
+            if isinstance(decoded, list):
+                vehicle_classes = [str(x).strip() for x in decoded if str(x).strip()]
+        except Exception:
+            vehicle_classes = []
+    # Backward compat: when no list is provided, fall back to the
+    # single vehicle_type if present (and put it in the list so the
+    # downstream registration loop is uniform).
+    if not vehicle_classes and vehicle_type:
+        vehicle_classes = [vehicle_type]
     expected_version = (data.get('expected_version') or '').strip()
 
     if not template_path:
@@ -4770,13 +4801,25 @@ def create_tire(data: Dict) -> Dict:
     if donor_row is None:
         return {'error': f'Template "{template_path}" has no usable VehicleParts0 donor row'}
 
-    # Override donor row with user-selected vehicle type if specified
-    if vehicle_type:
-        vt_donor = _lookup_tire_vehicleparts_row_by_name(vehicle_type)
-        if vt_donor is not None:
-            donor_row = vt_donor
-        else:
-            logger.warning("Vehicle type donor '%s' not found, using template donor.", vehicle_type)
+    # Resolve every selected vehicle class to its donor row. Each
+    # entry gives us a different donor whose tail (which carries the
+    # VehicleKeys / TruckClasses / VehicleTypes filter fields) defines
+    # which vehicle class the resulting VehicleParts0 row will appear
+    # in. When the list is empty we fall back to the template-derived
+    # single donor (same as legacy behaviour).
+    resolved_donors: List[tuple[str, Dict[str, Any]]] = []
+    for vc in vehicle_classes:
+        vt_donor = _lookup_tire_vehicleparts_row_by_name(vc)
+        if vt_donor is None:
+            logger.warning(
+                "Vehicle class donor '%s' not found, skipping.", vc
+            )
+            continue
+        resolved_donors.append((vc, vt_donor))
+    if not resolved_donors:
+        # Backward compat: no list / nothing matched -> use the
+        # template's own row exactly as before.
+        resolved_donors.append(('__template__', donor_row))
 
     display_name = raw_display_name or donor_shop.get('display_name') or new_name
     code = raw_code or donor_shop.get('code') or ''
@@ -4828,17 +4871,28 @@ def create_tire(data: Dict) -> Dict:
 
             vp_ua = open(vp_uasset_path, 'rb').read()
             vp_ue = open(vp_uexp_path, 'rb').read()
-            vp_ua, vp_ue, action = _register_tire_vehicleparts_entry(
-                vp_ua,
-                vp_ue,
-                new_name,
-                display_name=display_name,
-                code=code,
-                price=price,
-                weight=weight,
-                donor_row=donor_row,
-                update_existing=True,
-            )
+            # Register one VehicleParts0 row per resolved donor.
+            # Same fname (so the rows are visually grouped under the
+            # tire's row name in inspectors) but distinct fname_number
+            # so they coexist. Each row carries its donor's vehicle
+            # filter fields, so the tire shows up on every selected
+            # vehicle class.
+            action = 'created'
+            for slot_idx, (donor_label, donor) in enumerate(resolved_donors):
+                vp_ua, vp_ue, slot_action = _register_tire_vehicleparts_entry(
+                    vp_ua,
+                    vp_ue,
+                    new_name,
+                    display_name=display_name,
+                    code=code,
+                    price=price,
+                    weight=weight,
+                    donor_row=donor,
+                    update_existing=True,
+                    fname_number=slot_idx,
+                )
+                if slot_action != 'created':
+                    action = slot_action
             vp_ua = _patch_uasset_serial_size(vp_ua, len(vp_ue))
             with open(vp_uasset_path, 'wb') as f:
                 f.write(vp_ua)
@@ -4848,12 +4902,18 @@ def create_tire(data: Dict) -> Dict:
 
             _validate_tire_generation(new_uasset_path, new_uexp_path, new_name, vp_uasset_path, vp_uexp_path)
 
-            # Save creation inputs so they persist for re-inspection
+            # Save creation inputs so they persist for re-inspection.
+            # The new vehicle_classes list is the multi-select payload;
+            # we still write the legacy vehicle_type field too so old
+            # tooling that reads it doesn't break (it's the first
+            # selected class as a single string).
             import json as _json
             _creation_meta_path = os.path.join(MOD_TIRE_DIR, new_name + '.creation.json')
             try:
                 _json.dump({
-                    'vehicle_type': vehicle_type or '',
+                    'vehicle_type': (vehicle_classes[0] if vehicle_classes
+                                     else (vehicle_type or '')),
+                    'vehicle_classes': vehicle_classes,
                     'template_path': template_path,
                 }, open(_creation_meta_path, 'w'))
             except Exception:
