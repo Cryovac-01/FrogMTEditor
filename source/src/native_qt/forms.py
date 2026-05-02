@@ -474,10 +474,42 @@ class TireVehicleClassesWidget(QtWidgets.QWidget):
         # Skip the first 'Auto' entry — it doesn't make sense in a
         # multi-select context (the server can't auto-detect when
         # the user has explicitly selected a list).
+        # Stylesheet for the indicator: Qt's default dark-theme
+        # checkbox draws a 1px platform-default border that's nearly
+        # invisible against the editor's near-black surface. Override
+        # with an explicit 14×14 outlined box plus an accent fill on
+        # check so the tick state is unambiguous at a glance.
+        _indicator_qss = """
+            QCheckBox {
+                color: #cdd6e0;
+                spacing: 8px;
+                padding: 2px 0;
+            }
+            QCheckBox::indicator {
+                width: 14px;
+                height: 14px;
+                border-radius: 3px;
+                border: 1px solid #6b7c8e;
+                background: #1a2532;
+            }
+            QCheckBox::indicator:hover {
+                border: 1px solid #9aacbd;
+            }
+            QCheckBox::indicator:checked {
+                background: #73c686;
+                border: 1px solid #73c686;
+                image: url();
+            }
+            QCheckBox::indicator:checked:hover {
+                background: #8bd599;
+                border: 1px solid #8bd599;
+            }
+        """
         for display_label, donor_name in TIRE_VEHICLE_TYPE_CHOICES:
             if not donor_name:
                 continue  # 'Auto (from template)'
             cb = QtWidgets.QCheckBox(display_label)
+            cb.setStyleSheet(_indicator_qss)
             cb.toggled.connect(lambda _checked=False, s=self: s.changed.emit())
             layout.addWidget(cb)
             self._checkboxes.append((donor_name, cb))
@@ -927,6 +959,13 @@ class PartEditorForm(QtWidgets.QWidget):
         self.tire_vehicle_classes_widget = widget
 
     def _add_property_row(self, parent_layout: QtWidgets.QLayout, key: str, prop: Dict[str, Any]) -> None:
+        # Hide fields that aren't actually present in this part's
+        # binary layout. Showing "Not serialized on this layout" as
+        # a placeholder + helper text just clutters the form with
+        # rows the user can't interact with. Skip them entirely so
+        # the visible form only contains editable fields.
+        if prop.get("missing"):
+            return
         name_label = QtWidgets.QLabel(format_property_name(key))
         unit = str(prop.get("unit") or "").strip()
         readonly = bool(prop.get("editable") is False or is_readonly_property(key, self.part_type))
@@ -1239,7 +1278,17 @@ class PartEditorForm(QtWidgets.QWidget):
         self.content_layout.addWidget(identity_group)
 
         for section_title, rows in grouped_sections:
-            visible_rows = [(key, prop) for key, prop in rows if key not in self.hidden_properties]
+            # Drop hidden_properties (variant-driven hiding) AND any
+            # field not actually serialized in this binary layout.
+            # The latter prevents an empty section card when every
+            # row in the group is "missing" — e.g. the tire Wear
+            # and Thermal section on a layout that doesn't store
+            # any of those fields.
+            visible_rows = [
+                (key, prop) for key, prop in rows
+                if key not in self.hidden_properties
+                and not prop.get('missing')
+            ]
             if not visible_rows:
                 continue
             if self.creator_mode:

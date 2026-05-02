@@ -4095,10 +4095,24 @@ def _load_tire_template_catalog() -> Dict[str, Any]:
                 current_properties = list(tire_field_catalog.get('templates', {}).get(template_path) or props.keys())
                 from native_services import estimate_tire_grip_g as _estimate_grip
                 grip_g = _estimate_grip(detail)
+                # Disambiguate variants whose vanilla display_name is
+                # shared between front and DRW (Dual Rear Wheel) rows
+                # — e.g. HighLoadCapacityTire is set on both the
+                # KMH2 (front) and KMH2-DRW (rear) rows in vanilla
+                # VehicleParts0, so without intervention the catalog
+                # tile shows two identical-looking entries.
+                _raw_title = shop.get('display_name') or name
+                _code_str = str(shop.get('code', '')).upper()
+                _title_str = str(_raw_title).upper()
+                if 'DRW' in _code_str and 'DRW' not in _title_str \
+                   and 'DUAL REAR' not in _title_str:
+                    title_text = f'{_raw_title} (Dual Rear Wheel)'
+                else:
+                    title_text = _raw_title
                 group['tires'].append({
                     'name': name,
                     'path': template_path,
-                    'title': shop.get('display_name') or name,
+                    'title': title_text,
                     'code': shop.get('code', ''),
                     'price': shop.get('price', 500),
                     'weight': shop.get('weight', 10.0),

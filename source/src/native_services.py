@@ -201,24 +201,121 @@ PROPERTY_DESCRIPTIONS = {
 
     # ── Tire Properties ───────────────────────────────────────────────
     "GripMultiplier": (
-        "Offroad grip adjustment as a percentage offset. "
-        "0 = baseline behavior. Positive values add offroad grip, negative values reduce it. "
-        "Stored internally as a multiplier. Typical range: -50 to +100."
+        "Off-road grip boost as a percentage. 0 = stock grip, +50 = "
+        "50% more grip on dirt/sand/grass, -25 = 25% less. Mostly "
+        "affects loose surfaces; on tarmac it has very little effect "
+        "either way. Typical range: -50 to +100. Negative values "
+        "make sense for slick race tires that sacrifice off-road "
+        "behaviour for on-road performance."
     ),
-    "LateralStiffness": "Base sideways carcass stiffness. Higher values resist lateral deformation more strongly.",
-    "LongStiffness": "Base longitudinal stiffness for traction and braking load.",
-    "LongSlipStiffness": "Longitudinal slip response term. Shapes how quickly the tire reacts as it starts spinning or locking.",
-    "CorneringStiffness": "Primary slip-angle cornering force term. Higher values usually increase lateral bite once the tire takes a set.",
-    "LoadRating": "Nominal supported load rating for the tire.",
-    "MaxLoad": "Upper supported load limit before the tire is outside its intended operating range.",
-    "MaxSpeed": "Rated top speed for the tire layout.",
-    "RollingResistance": "Rolling drag term. Lower values usually help top speed and efficiency.",
-    "WearRate": "Primary wear scalar for normal running conditions.",
-    "WearRate2": "Secondary wear scalar on richer tire layouts. Reverse engineered and likely adds extra wear behavior.",
-    "ThermalSensitivity": "Thermal response scalar. Higher values appear to make grip change more aggressively with temperature.",
-    "TireTemperature": "Explicit tire operating temperature field on richer layouts.",
-    "CamberStiffness": "Camber-related cornering contribution. The editor uses this in the quick grip estimate as Cornering Stiffness + Camber Stiffness / 2.",
-    "TreadDepth": "Additional tread-depth field used on richer layouts. Likely tied to off-road bite, wet behavior, and wear reserve.",
+    "LateralStiffness": (
+        "How firm the tire's sidewall is sideways. Higher = the tire "
+        "deforms less when you turn the wheel, which makes the car "
+        "respond more sharply but also less forgivingly (sudden "
+        "grip loss instead of a gradual slide). "
+        "Stock cars: ~600,000–800,000. Performance: ~900,000+. "
+        "Heavy-duty trucks need higher values just to handle the load."
+    ),
+    "LongStiffness": (
+        "How firm the tire is when you accelerate or brake. Higher "
+        "values give crisper throttle and brake response (less "
+        "sponginess) at the cost of being more prone to wheelspin "
+        "or lockup if you overdo it. "
+        "Stock cars: ~500,000–700,000. Race tires: ~800,000+."
+    ),
+    "LongSlipStiffness": (
+        "How quickly the tire reacts when it starts to slip "
+        "(spinning under throttle or locking under brakes). Higher "
+        "values mean the slip catches up faster — better launches "
+        "and more consistent ABS feel. Lower values give the slip "
+        "more time to develop, which can feel either smoother or "
+        "sloppier depending on your driving. "
+        "Stock cars: ~150,000–250,000."
+    ),
+    "CorneringStiffness": (
+        "How much grip the tire has WHILE it's already turning. "
+        "Higher = more bite mid-corner, which lets you carry more "
+        "speed through bends. Above ~1.2 the car feels glued to the "
+        "road; above ~2.0 it's arcade-grippy. "
+        "Stock cars: 0.85–1.05. Performance: 1.05–1.4. Drift tires "
+        "drop this on purpose for slide-friendliness."
+    ),
+    "LoadRating": (
+        "How much weight the tire is rated to carry per wheel (in "
+        "the game's internal units, not real-world kg). Mostly "
+        "informational — the game doesn't catastrophically punish "
+        "exceeding this, but heavy loads on under-rated tires "
+        "compress the suspension and increase wear. Match the "
+        "donor's value unless you know what you're doing."
+    ),
+    "MaxLoad": (
+        "Hard upper limit on the load the tire can carry before "
+        "behaviour breaks down (severe grip loss, possible blowout "
+        "on heavy impacts). Set this above your expected vehicle "
+        "weight per wheel, with margin. Match the donor unless you're "
+        "explicitly building a heavy-duty tire."
+    ),
+    "MaxSpeed": (
+        "Top speed the tire is rated for, in the game's internal "
+        "units (not km/h or mph). Above this speed the tire's grip "
+        "characteristics degrade and you risk instability. Most "
+        "stock tires are rated comfortably above any vehicle's top "
+        "speed, so this rarely matters unless you're building a "
+        "race-car tire on a slow vehicle."
+    ),
+    "RollingResistance": (
+        "How much the tire fights against rolling forward. Lower = "
+        "better top speed and fuel economy, but also less natural "
+        "engine braking and slightly less feel on coast. Higher = "
+        "the car loses speed faster when you lift off the throttle. "
+        "Stock cars: 0.012–0.018. Performance race tires can dip "
+        "below 0.010 for top-speed runs."
+    ),
+    "WearRate": (
+        "How fast the tire wears down under normal driving. Higher "
+        "= tires wear out sooner (need replacement more often). "
+        "Lower = tires last longer but typically have less peak "
+        "grip (it's a real-world trade-off the game models). "
+        "Stock cars: ~0.005–0.015. Set to 0 for tires that never wear."
+    ),
+    "WearRate2": (
+        "Secondary wear rate that some tire layouts use to model "
+        "different wear behaviour at high slip (drifting, hard "
+        "cornering, burnouts). Behaves like WearRate but only "
+        "kicks in under heavy load. Match the donor unless you're "
+        "tuning for a specific use case."
+    ),
+    "ThermalSensitivity": (
+        "How much the tire's grip changes with temperature. Higher "
+        "= grip swings dramatically as the tire warms up or cools "
+        "down (race-tire behaviour — needs to be in a specific temp "
+        "window for peak grip). Lower = grip stays consistent "
+        "across all temperatures (street-tire behaviour). "
+        "Set to 0 if you want the tire to feel the same in any "
+        "weather."
+    ),
+    "TireTemperature": (
+        "Starting temperature of the tire in the game's internal "
+        "units. Mostly just sets the initial state when a vehicle "
+        "spawns; gameplay temperature changes from that point on "
+        "based on how you drive. Match the donor."
+    ),
+    "CamberStiffness": (
+        "Extra cornering grip the tire generates when the wheel is "
+        "tilted (cambered) into the corner. Race cars run negative "
+        "camber to take advantage of this. Higher values mean "
+        "camber adjustments matter more for handling. "
+        "The grip estimate shown in the editor adds half of this "
+        "value to Cornering Stiffness, so bumping it does noticeably "
+        "improve the predicted G."
+    ),
+    "TreadDepth": (
+        "How deep the tire's tread is. Deeper tread = better grip "
+        "on loose surfaces (off-road, wet, snow) but worse grip on "
+        "dry tarmac. Affects wear behaviour too — deeper tread has "
+        "more material to wear through before the tire needs "
+        "replacement. Off-road tires: 0.008+. Race slicks: ~0.001."
+    ),
 }
 
 ENGINE_GROUPS = (
