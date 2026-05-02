@@ -38,15 +38,13 @@ UI_TITLE = 'Contract Payment Boost'
 UI_DESCRIPTION = (
     "Multiplies <code>CompletionPayment</code> on every contract in "
     "<code>UMTCompany.ContractsInProgress[]</code>. A 2× setting "
-    "doubles the cash you get when you finish a delivery contract; "
-    "5× quintuples it.\n\n"
+    "doubles the cash you get when you finish a delivery contract.\n\n"
     "Polls every 5 seconds so newly-signed contracts get the boost "
     "shortly after you take them on. Per-contract baselines are "
     "captured on first sighting so repeated polls don't compound.\n\n"
     "<b>1.0×</b> — vanilla payouts, no change.<br>"
     "<b>2.0×</b> — every contract pays double.<br>"
-    "<b>5.0×</b> — every contract pays 5×.<br>"
-    "<b>10.0×</b> — sandbox-mode payouts, useful for testing.\n\n"
+    "<b>5.0×</b> — every contract pays 5× (slider cap).\n\n"
     "Note: this is distinct from <i>Company Profit Boost</i> "
     "(which targets the per-delivery owner-share via "
     "<code>ServerGiveOwnerProfitShare</code>). You can run both — "
@@ -65,7 +63,9 @@ SETTINGS = [
         kind='float',
         default=1.0,
         min_value=0.25,
-        max_value=10.0,
+        max_value=5.0,   # capped lower than the production/storage
+                         # 10x ceiling — contract payouts compound
+                         # quickly, and 5x is already heavy.
         step=0.25,
         suffix='×',
         tooltip='Scale the CompletionPayment on every active contract. '
@@ -219,8 +219,8 @@ def _validate(config: Dict[str, Any]) -> Dict[str, Any]:
             val = float(val)
         except (TypeError, ValueError):
             raise ValueError(f"{s.key} must be numeric")
-        if not 0.25 <= val <= 10.0:
-            raise ValueError(f"{s.key} = {val} out of range [0.25, 10.0]")
+        if not 0.25 <= val <= 5.0:
+            raise ValueError(f"{s.key} = {val} out of range [0.25, 5.0]")
         out[s.key] = val
     return out
 
