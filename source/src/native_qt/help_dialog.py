@@ -270,12 +270,20 @@ def open_help(topic_key: str, parent: Optional[QtWidgets.QWidget] = None) -> Non
     dlg.exec()
 
 
-def make_need_help_header(topic_key: str,
+def make_need_help_header(topic_key,
                           parent: Optional[QtWidgets.QWidget] = None
                           ) -> QtWidgets.QWidget:
     """Build the "Need Help?" header strip that goes at the top of
     every editor page. Returns a QWidget the caller adds to the
     page's layout (typically as the first widget).
+
+    ``topic_key`` is either:
+      - a static string (e.g. ``'workspace'``) — opens that topic
+        every time the button is clicked; OR
+      - a zero-arg callable returning a string — resolved at click
+        time, so a page like the Creator can route to
+        ``'creator_engine'`` vs ``'creator_tire'`` based on the
+        currently-loaded part type.
 
     The button is right-aligned so it doesn't compete with the page's
     own header text.
@@ -304,7 +312,18 @@ def make_need_help_header(topic_key: str,
     )
     btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
     btn.setToolTip("Open detailed help for this page")
-    btn.clicked.connect(lambda: open_help(topic_key, container.window()))
+
+    def _on_click() -> None:
+        # Resolve the topic key per-click so callable resolvers can
+        # consult live UI state (e.g. "is the user editing an engine
+        # or a tire right now?").
+        try:
+            key = topic_key() if callable(topic_key) else topic_key
+        except Exception:
+            key = 'workspace'  # safe fallback; always exists
+        open_help(str(key or 'workspace'), container.window())
+
+    btn.clicked.connect(_on_click)
     layout.addWidget(btn, 0)
 
     return container

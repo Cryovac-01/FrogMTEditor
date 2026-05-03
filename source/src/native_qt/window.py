@@ -701,10 +701,19 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         creator_layout = QtWidgets.QVBoxLayout(creator_page)
         creator_layout.setContentsMargins(0, 0, 0, 0)
         creator_layout.setSpacing(0)
-        creator_layout.addWidget(make_need_help_header('creator', creator_page))
         self.creator_workspace = CreatorWorkspace(self, self.service)
         self.creator_workspace.cancel_requested.connect(self.cancel_creator_mode)
         self.creator_workspace.created.connect(self.on_part_created)
+        # Help button routes per part type — engines and tires
+        # have very different help content + dedicated archetypes,
+        # so we pick the topic at click time based on what the
+        # creator workspace is currently editing.
+        def _creator_help_topic() -> str:
+            pt = getattr(self.creator_workspace, 'part_type', '') or ''
+            if pt == 'tire':
+                return 'creator_tire'
+            return 'creator_engine'
+        creator_layout.addWidget(make_need_help_header(_creator_help_topic, creator_page))
         creator_layout.addWidget(self.creator_workspace)
         self.stack.addWidget(creator_page)
 

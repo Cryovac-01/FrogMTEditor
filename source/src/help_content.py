@@ -690,74 +690,111 @@ _CREATOR_TIRE_SECTIONS: List[Dict[str, Any]] = [
 ]
 
 
-_CREATOR = {
-    'title': 'Engine / Tire Creator',
-    'subtitle': 'Fork a vanilla part into a new modded one with custom values.',
+_SHARED_VALIDATION_SECTION = {
+    'id': 'validation',
+    'title': 'Input validation: typical vs hard limits',
+    'body': (
+        '<p>Every numeric field has two ranges:</p>'
+        '<ul>'
+        '<li><b>Typical range</b> — sane values used by '
+        'real-world engines/tires. Going outside this range '
+        'is allowed but the field gets a yellow border + '
+        'warning hint.</li>'
+        '<li><b>Hard limit</b> — absolute floor and '
+        'ceiling. Going outside this range is blocked at '
+        'save time — these values cause crashes, '
+        'freezes, or game refusal-to-load.</li>'
+        '</ul>'
+        '<p>Hover over any field to see both ranges in a '
+        'tooltip. The inline grey text under each field shows '
+        'the typical range as a quick reference.</p>'
+        '<p>Save is blocked entirely when any field is in '
+        'the hard error range. When fields are in the warn '
+        'range only, you get a confirmation dialog with the '
+        'option to proceed anyway.</p>'
+    ),
+}
+
+_SHARED_FORK_EDIT_SECTION = {
+    'id': 'fork-edit',
+    'title': 'Forking and re-editing existing parts',
+    'body': (
+        '<p>Click a part you’ve already created in the '
+        'Generated Parts sidebar, then "Fork" to load it back '
+        'into the Creator with all its values. Saving creates '
+        'a new part if you change the name; otherwise it '
+        'updates the existing one in place.</p>'
+        '<p>Fields the original creator inputs are restored '
+        'from the part’s <code>.creation.json</code> '
+        'sidecar:</p>'
+        '<ul>'
+        '<li>vehicle_type / vehicle_classes (tires)</li>'
+        '<li>fuel_type, peak_torque_rpm, max_hp, peak_hp_rpm '
+        '(engines)</li>'
+        '<li>level_requirements (engines)</li>'
+        '<li>volume_offset (engines)</li>'
+        '</ul>'
+    ),
+}
+
+
+_CREATOR_ENGINE = {
+    'title': 'Engine Creator',
+    'subtitle': 'Fork a vanilla engine into a new modded one with custom values.',
     'sections': [
         {
             'id': 'overview',
             'title': 'Overview',
             'body': (
-                '<p>The Creator is where you build new modded engines '
-                'and tires from vanilla templates. Pick a donor, set '
-                'the values you want, hit Save — the editor '
-                'writes the .uasset/.uexp files plus the matching '
-                'DataTable rows.</p>'
+                '<p>The Engine Creator is where you build new modded '
+                'engines from vanilla templates. Pick a donor engine, '
+                'set the values you want, hit Save — the editor '
+                'writes the .uasset/.uexp files plus the matching row '
+                'in the Engines DataTable.</p>'
                 '<p>The fields you can edit depend on which donor '
                 'you pick. The editor only shows fields that are '
                 'actually serialized in the donor’s binary '
                 'layout; missing fields are hidden entirely.</p>'
             ),
         },
-        # Engine sections
         *_CREATOR_ENGINE_SECTIONS,
-        # Tire sections
+        _SHARED_VALIDATION_SECTION,
+        _SHARED_FORK_EDIT_SECTION,
+    ],
+}
+
+
+_CREATOR_TIRE = {
+    'title': 'Tire Creator',
+    'subtitle': 'Fork a vanilla tire into a new modded one with custom values.',
+    'sections': [
+        {
+            'id': 'overview',
+            'title': 'Overview',
+            'body': (
+                '<p>The Tire Creator is where you build new modded '
+                'tires from vanilla templates. Pick a donor tire, set '
+                'the values you want, choose which vehicle classes '
+                'should see the tire as an option in the modification '
+                'list, hit Save — the editor writes the .uasset/'
+                '.uexp files plus the matching rows in the '
+                'VehicleParts0 DataTable.</p>'
+                '<p>The fields you can edit depend on which donor '
+                'you pick. The editor only shows fields that are '
+                'actually serialized in the donor’s binary '
+                'layout; missing fields are hidden entirely.</p>'
+                '<p>Below the property fields, the <b>Tire Analysis</b> '
+                'card shows five live-updated charts: grip vs '
+                'temperature, grip factor vs load, lateral force vs '
+                'slip angle, tread remaining vs distance, and a '
+                'stiffness profile. Each chart has a caption '
+                'explaining whether the curve is math-grounded or '
+                'approximated.</p>'
+            ),
+        },
         *_CREATOR_TIRE_SECTIONS,
-        {
-            'id': 'validation',
-            'title': 'Input validation: typical vs hard limits',
-            'body': (
-                '<p>Every numeric field has two ranges:</p>'
-                '<ul>'
-                '<li><b>Typical range</b> — sane values used by '
-                'real-world engines/tires. Going outside this range '
-                'is allowed but the field gets a yellow border + '
-                'warning hint.</li>'
-                '<li><b>Hard limit</b> — absolute floor and '
-                'ceiling. Going outside this range is blocked at '
-                'save time — these values cause crashes, '
-                'freezes, or game refusal-to-load.</li>'
-                '</ul>'
-                '<p>Hover over any field to see both ranges in a '
-                'tooltip. The inline grey text under each field shows '
-                'the typical range as a quick reference.</p>'
-                '<p>Save is blocked entirely when any field is in '
-                'the hard error range. When fields are in the warn '
-                'range only, you get a confirmation dialog with the '
-                'option to proceed anyway.</p>'
-            ),
-        },
-        {
-            'id': 'fork-edit',
-            'title': 'Forking and re-editing existing parts',
-            'body': (
-                '<p>Click a part you’ve already created in the '
-                'Generated Parts sidebar, then "Fork" to load it back '
-                'into the Creator with all its values. Saving creates '
-                'a new part if you change the name; otherwise it '
-                'updates the existing one in place.</p>'
-                '<p>Fields the original creator inputs are restored '
-                'from the part’s <code>.creation.json</code> '
-                'sidecar:</p>'
-                '<ul>'
-                '<li>vehicle_type / vehicle_classes (tires)</li>'
-                '<li>fuel_type, peak_torque_rpm, max_hp, peak_hp_rpm '
-                '(engines)</li>'
-                '<li>level_requirements (engines)</li>'
-                '<li>volume_offset (engines)</li>'
-                '</ul>'
-            ),
-        },
+        _SHARED_VALIDATION_SECTION,
+        _SHARED_FORK_EDIT_SECTION,
     ],
 }
 
@@ -1108,14 +1145,20 @@ _LUA_SCRIPTS = {
 # Public registry
 # ──────────────────────────────────────────────────────────────────────
 HELP_TOPICS: Dict[str, Dict[str, Any]] = {
-    'workspace':    _WORKSPACE,
-    'creator':      _CREATOR,
-    'economy':      _ECONOMY,
-    'bus_route':    _BUS_ROUTE,
-    'transmission': _TRANSMISSION,
-    'policy':       _POLICY,
-    'lua_scripts':  _LUA_SCRIPTS,
+    'workspace':      _WORKSPACE,
+    'creator_engine': _CREATOR_ENGINE,
+    'creator_tire':   _CREATOR_TIRE,
+    'economy':        _ECONOMY,
+    'bus_route':      _BUS_ROUTE,
+    'transmission':   _TRANSMISSION,
+    'policy':         _POLICY,
+    'lua_scripts':    _LUA_SCRIPTS,
 }
+
+# Back-compat: the original single 'creator' key still resolves —
+# routes to the engine help by default. Code that wants to be
+# part-type-aware should pass 'creator_engine' or 'creator_tire'.
+HELP_TOPICS['creator'] = _CREATOR_ENGINE
 
 
 def get_topic(key: str) -> Dict[str, Any]:
