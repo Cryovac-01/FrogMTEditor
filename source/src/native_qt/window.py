@@ -11,6 +11,12 @@ from .transmission_panel import TransmissionEditorPanel
 from .policy_panel import PolicyEditorPanel
 from .lua_scripts_panel import LuaScriptsPanel
 from .help_dialog import make_need_help_header
+# i18n shim — module-level so every panel/header/button in the
+# window can flow through the active translation pack. Resolves at
+# call-time, so widgets built before set_language() still pick up
+# the right pack as long as it's set before UI construction starts
+# (native_qt_app.main does this).
+from i18n import _ as _t
 
 class NativeQtEditorWindow(QtWidgets.QMainWindow):
     def __init__(self, service: NativeEditorService, smoke_test: bool = False) -> None:
@@ -108,7 +114,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         brand_copy = QtWidgets.QVBoxLayout()
         brand_copy.setContentsMargins(0, 0, 0, 0)
         brand_copy.setSpacing(0)
-        product_meta = QtWidgets.QLabel("MOD WORKSPACE")
+        product_meta = QtWidgets.QLabel(_t("MOD WORKSPACE"))
         set_label_kind(product_meta, "appEyebrow")
         product_title = QtWidgets.QLabel(APP_NAME)
         set_label_kind(product_title, "product")
@@ -120,11 +126,11 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         context_layout = QtWidgets.QVBoxLayout(context_widget)
         context_layout.setContentsMargins(0, 0, 0, 0)
         context_layout.setSpacing(0)
-        self.command_context_label = QtWidgets.QLabel("Generated parts workspace")
+        self.command_context_label = QtWidgets.QLabel(_t("Generated parts workspace"))
         self.command_context_label.setWordWrap(False)
         self.command_context_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Preferred)
         set_label_kind(self.command_context_label, "section")
-        self.command_context_meta_label = QtWidgets.QLabel("Waiting for local workspace bootstrap.")
+        self.command_context_meta_label = QtWidgets.QLabel(_t("Waiting for local workspace bootstrap."))
         self.command_context_meta_label.setWordWrap(True)
         self.command_context_meta_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Preferred)
         set_label_kind(self.command_context_meta_label, "meta")
@@ -136,7 +142,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         top_actions.setContentsMargins(0, 0, 0, 0)
         top_actions.setSpacing(SPACING.sm)
         top_actions.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        self.status_label = QtWidgets.QLabel("Starting local workspace...")
+        self.status_label = QtWidgets.QLabel(_t("Starting local workspace..."))
         self.status_label.setObjectName("statusPill")
         set_label_kind(self.status_label, "pill")
         self.status_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Fixed)
@@ -223,7 +229,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         sidebar_icon.setFixedSize(ICON_SIZES.inline, ICON_SIZES.inline)
         sidebar_icon.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         sidebar_header.addWidget(sidebar_icon)
-        sidebar_title = QtWidgets.QLabel("Generated Parts")
+        sidebar_title = QtWidgets.QLabel(_t("Generated Parts"))
         set_label_kind(sidebar_title, "section")
         sidebar_header.addWidget(sidebar_title)
         sidebar_header.addStretch(1)
@@ -246,16 +252,16 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         sidebar_counts.addStretch(1)
         sidebar_layout.addLayout(sidebar_counts)
 
-        search_label = QtWidgets.QLabel("Search")
+        search_label = QtWidgets.QLabel(_t("Search"))
         set_label_kind(search_label, "muted")
         sidebar_layout.addWidget(search_label)
         self.search_edit = QtWidgets.QLineEdit()
         configure_field_control(self.search_edit, "search")
-        self.search_edit.setPlaceholderText("Search parts")
+        self.search_edit.setPlaceholderText(_t("Search parts"))
         self.search_edit.addAction(load_icon("search.svg"), QtWidgets.QLineEdit.ActionPosition.LeadingPosition)
         sidebar_layout.addWidget(self.search_edit)
 
-        filter_label = QtWidgets.QLabel("Filter")
+        filter_label = QtWidgets.QLabel(_t("Filter"))
         set_label_kind(filter_label, "muted")
         sidebar_layout.addWidget(filter_label)
         filter_row = QtWidgets.QHBoxLayout()
@@ -263,9 +269,9 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         filter_row.setSpacing(SPACING.xs)
         self.filter_group = QtWidgets.QButtonGroup(self)
         self.filter_group.setExclusive(True)
-        self.filter_all_button = QtWidgets.QPushButton("All")
-        self.filter_engine_button = QtWidgets.QPushButton("Engines")
-        self.filter_tire_button = QtWidgets.QPushButton("Tires")
+        self.filter_all_button = QtWidgets.QPushButton(_t("All"))
+        self.filter_engine_button = QtWidgets.QPushButton(_t("Engines"))
+        self.filter_tire_button = QtWidgets.QPushButton(_t("Tires"))
         for button in (self.filter_all_button, self.filter_engine_button, self.filter_tire_button):
             button.setCheckable(True)
             set_button_role(button, "chip")
@@ -279,32 +285,32 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         create_buttons.setContentsMargins(0, SPACING.xs, 0, SPACING.xs)
         create_buttons.setHorizontalSpacing(SPACING.sm)
         create_buttons.setVerticalSpacing(SPACING.sm)
-        self.new_engine_button = QtWidgets.QPushButton("New Engine")
+        self.new_engine_button = QtWidgets.QPushButton(_t("New Engine"))
         self.new_engine_button.setObjectName("newEngineButton")
         configure_launcher_button(
             self.new_engine_button,
             "primary",
             load_tinted_icon("engine.svg", "#0b1410", size=LAUNCHER_BUTTON_ICON_SIZE),
         )
-        self.new_tire_button = QtWidgets.QPushButton("New Tire")
+        self.new_tire_button = QtWidgets.QPushButton(_t("New Tire"))
         self.new_tire_button.setObjectName("newTireButton")
         configure_launcher_button(self.new_tire_button, "secondary", self.icons["tire"])
         create_buttons.addWidget(self.new_engine_button, 0, 0)
         create_buttons.addWidget(self.new_tire_button, 1, 0)
 
-        self.economy_editor_button = QtWidgets.QPushButton("Economy Editor")
+        self.economy_editor_button = QtWidgets.QPushButton(_t("Economy Editor"))
         self.economy_editor_button.setObjectName("economyEditorButton")
         configure_launcher_button(self.economy_editor_button, "secondary", self.icons["parts"])
-        self.bus_route_button = QtWidgets.QPushButton("Bus Routes")
+        self.bus_route_button = QtWidgets.QPushButton(_t("Bus Routes"))
         self.bus_route_button.setObjectName("busRouteButton")
         configure_launcher_button(self.bus_route_button, "secondary", self.icons["curve"])
-        self.transmission_editor_button = QtWidgets.QPushButton("Transmissions")
+        self.transmission_editor_button = QtWidgets.QPushButton(_t("Transmissions"))
         self.transmission_editor_button.setObjectName("transmissionEditorButton")
         configure_launcher_button(self.transmission_editor_button, "secondary", self.icons["parts"])
-        self.policy_editor_button = QtWidgets.QPushButton("Policies")
+        self.policy_editor_button = QtWidgets.QPushButton(_t("Policies"))
         self.policy_editor_button.setObjectName("policyEditorButton")
         configure_launcher_button(self.policy_editor_button, "secondary", self.icons["parts"])
-        self.lua_scripts_button = QtWidgets.QPushButton("Lua Mods")
+        self.lua_scripts_button = QtWidgets.QPushButton(_t("Lua Mods"))
         self.lua_scripts_button.setObjectName("luaScriptsButton")
         configure_launcher_button(self.lua_scripts_button, "secondary", self.icons["parts"])
         create_buttons.addWidget(self.economy_editor_button, 2, 0)
@@ -374,9 +380,9 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         welcome_copy = QtWidgets.QVBoxLayout(welcome_copy_widget)
         welcome_copy.setContentsMargins(0, 0, 0, 0)
         welcome_copy.setSpacing(0)
-        empty_eyebrow = QtWidgets.QLabel("WORKSPACE OVERVIEW")
+        empty_eyebrow = QtWidgets.QLabel(_t("WORKSPACE OVERVIEW"))
         set_label_kind(empty_eyebrow, "eyebrow")
-        empty_title = QtWidgets.QLabel("Generated Parts Workspace")
+        empty_title = QtWidgets.QLabel(_t("Generated Parts Workspace"))
         set_label_kind(empty_title, "title")
         empty_title.setWordWrap(True)
         empty_copy = QtWidgets.QLabel(
@@ -398,14 +404,14 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         empty_actions.setVerticalSpacing(SPACING.xs)
         empty_actions.setColumnStretch(0, 1)
         empty_actions.setColumnStretch(1, 1)
-        self.empty_new_engine_button = QtWidgets.QPushButton("New Engine")
+        self.empty_new_engine_button = QtWidgets.QPushButton(_t("New Engine"))
         self.empty_new_engine_button.setObjectName("emptyNewEngineButton")
         configure_launcher_button(
             self.empty_new_engine_button,
             "primary",
             load_tinted_icon("engine.svg", "#0b1410", size=LAUNCHER_BUTTON_ICON_SIZE),
         )
-        self.empty_new_tire_button = QtWidgets.QPushButton("New Tire")
+        self.empty_new_tire_button = QtWidgets.QPushButton(_t("New Tire"))
         self.empty_new_tire_button.setObjectName("emptyNewTireButton")
         configure_launcher_button(self.empty_new_tire_button, "secondary", self.icons["tire"])
         self.empty_new_engine_button.ensurePolished()
@@ -494,7 +500,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         header_top.setSpacing(SPACING.md)
         header_copy = QtWidgets.QVBoxLayout()
         header_copy.setSpacing(4)
-        header_eyebrow = QtWidgets.QLabel("CURRENT PART")
+        header_eyebrow = QtWidgets.QLabel(_t("CURRENT PART"))
         set_label_kind(header_eyebrow, "eyebrow")
         self.part_title_label = QtWidgets.QLabel("")
         self.part_title_label.setWordWrap(True)
@@ -557,9 +563,9 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         overview_intro_layout = QtWidgets.QVBoxLayout(overview_intro)
         overview_intro_layout.setContentsMargins(SPACING.lg, SPACING.lg, SPACING.lg, SPACING.lg)
         overview_intro_layout.setSpacing(SPACING.xs)
-        overview_eyebrow = QtWidgets.QLabel("DOCUMENT OVERVIEW")
+        overview_eyebrow = QtWidgets.QLabel(_t("DOCUMENT OVERVIEW"))
         set_label_kind(overview_eyebrow, "eyebrow")
-        self.overview_title_label = QtWidgets.QLabel("Choose a generated part")
+        self.overview_title_label = QtWidgets.QLabel(_t("Choose a generated part"))
         set_label_kind(self.overview_title_label, "section")
         self.overview_body_label = QtWidgets.QLabel("The overview summarises the selected part, its current risk status, and the next recommended actions.")
         self.overview_body_label.setWordWrap(True)
@@ -581,13 +587,13 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         overview_details_layout = QtWidgets.QVBoxLayout(overview_details)
         overview_details_layout.setContentsMargins(12, 12, 12, 12)
         overview_details_layout.setSpacing(8)
-        overview_details_title = QtWidgets.QLabel("Current document snapshot")
+        overview_details_title = QtWidgets.QLabel(_t("Current document snapshot"))
         set_label_kind(overview_details_title, "section")
         self.overview_tree = build_key_value_tree("Overview", "Current value")
         overview_details_layout.addWidget(overview_details_title)
         overview_details_layout.addWidget(self.overview_tree, 1)
         overview_layout.addWidget(overview_details, 1)
-        self.tabs.addTab(overview_tab, self.icons["diagnostics"], "Overview")
+        self.tabs.addTab(overview_tab, self.icons["diagnostics"], _t("Overview"))
 
         properties_tab = QtWidgets.QWidget()
         properties_layout = QtWidgets.QVBoxLayout(properties_tab)
@@ -595,14 +601,14 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         self.editor_form = PartEditorForm()
         self.editor_form.changed.connect(self._on_editor_change)
         properties_layout.addWidget(self.editor_form)
-        self.tabs.addTab(properties_tab, self.icons["parts"], "Properties")
+        self.tabs.addTab(properties_tab, self.icons["parts"], _t("Properties"))
 
         curve_tab = QtWidgets.QWidget()
         curve_layout = QtWidgets.QVBoxLayout(curve_tab)
         curve_layout.setContentsMargins(0, 0, 0, 0)
         self.curve_card = CurveChartCard("curve_banner.png")
         curve_layout.addWidget(self.curve_card)
-        self.tabs.addTab(curve_tab, self.icons["curve"], "Curve")
+        self.tabs.addTab(curve_tab, self.icons["curve"], _t("Curve"))
         workspace_splitter.addWidget(document_shell)
 
         inspector_card = QtWidgets.QFrame()
@@ -612,7 +618,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         inspector_layout = QtWidgets.QVBoxLayout(inspector_card)
         inspector_layout.setContentsMargins(SPACING.lg, SPACING.lg, SPACING.lg, SPACING.lg)
         inspector_layout.setSpacing(SPACING.sm)
-        inspector_title = QtWidgets.QLabel("Contextual Inspector")
+        inspector_title = QtWidgets.QLabel(_t("Contextual Inspector"))
         set_label_kind(inspector_title, "section")
         self.inspector_summary_label = QtWidgets.QLabel("Selection context, validation, audio routing, and metadata stay visible here while you work.")
         self.inspector_summary_label.setWordWrap(True)
@@ -640,7 +646,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         validation_layout.addWidget(self.validation_status_label)
         validation_layout.addWidget(self.validation_counts_label)
         validation_layout.addWidget(self.validation_list, 1)
-        self.inspector_tabs.addTab(validation_tab, self.icons["diagnostics"], "Validation")
+        self.inspector_tabs.addTab(validation_tab, self.icons["diagnostics"], _t("Validation"))
 
         audio_tab = QtWidgets.QWidget()
         audio_layout = QtWidgets.QVBoxLayout(audio_tab)
@@ -650,7 +656,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         self.audio_summary_label.setWordWrap(True)
         set_label_kind(self.audio_summary_label, "muted")
         audio_actions = QtWidgets.QHBoxLayout()
-        self.audio_override_checkbox = QtWidgets.QCheckBox("Enable template override")
+        self.audio_override_checkbox = QtWidgets.QCheckBox(_t("Enable template override"))
         self.audio_apply_button = make_action_button(
             "Apply",
             role="secondary",
@@ -673,7 +679,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         audio_layout.addWidget(self.audio_summary_label)
         audio_layout.addLayout(audio_actions)
         audio_layout.addWidget(self.audio_tree, 1)
-        self.inspector_tabs.addTab(audio_tab, self.icons["audio"], "Audio")
+        self.inspector_tabs.addTab(audio_tab, self.icons["audio"], _t("Audio"))
 
         metadata_tab = QtWidgets.QWidget()
         metadata_layout = QtWidgets.QVBoxLayout(metadata_tab)
@@ -685,7 +691,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         self.metadata_tree = build_key_value_tree("Metadata", "Value")
         metadata_layout.addWidget(metadata_intro)
         metadata_layout.addWidget(self.metadata_tree, 1)
-        self.inspector_tabs.addTab(metadata_tab, self.icons["parts"], "Metadata")
+        self.inspector_tabs.addTab(metadata_tab, self.icons["parts"], _t("Metadata"))
 
         activity_tab = QtWidgets.QWidget()
         activity_layout = QtWidgets.QVBoxLayout(activity_tab)
@@ -698,7 +704,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         self.history_list.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.NoSelection)
         activity_layout.addWidget(activity_intro)
         activity_layout.addWidget(self.history_list, 1)
-        self.inspector_tabs.addTab(activity_tab, self.icons["reload"], "Activity")
+        self.inspector_tabs.addTab(activity_tab, self.icons["reload"], _t("Activity"))
 
         workspace_splitter.addWidget(inspector_card)
         workspace_splitter.setSizes([1040, SHELL_METRICS.inspector_min_width])
@@ -883,15 +889,15 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         tools_menu.addAction(self._make_action(_t("Bus Route Planner"), self.open_bus_route_planner, shortcut="Ctrl+B"))
         tools_menu.addAction(self._make_action(_t("Transmission Editor"), self.open_transmission_editor, shortcut="Ctrl+T"))
 
-        view_menu = menu_bar.addMenu("&View")
-        view_menu.addAction(self._make_action("Focus Search", lambda: self.search_edit.setFocus(), shortcut="Ctrl+F"))
-        view_menu.addAction(self._make_action("Open Validation Inspector", lambda: self.inspector_tabs.setCurrentIndex(0)))
-        view_menu.addAction(self._make_action("Open Audio Inspector", lambda: self.inspector_tabs.setCurrentIndex(1)))
-        view_menu.addAction(self._make_action("Open Metadata Inspector", lambda: self.inspector_tabs.setCurrentIndex(2)))
-        view_menu.addAction(self._make_action("Open Activity Inspector", lambda: self.inspector_tabs.setCurrentIndex(3)))
+        view_menu = menu_bar.addMenu(_t("&View"))
+        view_menu.addAction(self._make_action(_t("Focus Search"), lambda: self.search_edit.setFocus(), shortcut="Ctrl+F"))
+        view_menu.addAction(self._make_action(_t("Open Validation Inspector"), lambda: self.inspector_tabs.setCurrentIndex(0)))
+        view_menu.addAction(self._make_action(_t("Open Audio Inspector"), lambda: self.inspector_tabs.setCurrentIndex(1)))
+        view_menu.addAction(self._make_action(_t("Open Metadata Inspector"), lambda: self.inspector_tabs.setCurrentIndex(2)))
+        view_menu.addAction(self._make_action(_t("Open Activity Inspector"), lambda: self.inspector_tabs.setCurrentIndex(3)))
 
-        help_menu = menu_bar.addMenu("&Help")
-        help_menu.addAction(self._make_action("Keyboard Shortcuts", self.show_shortcuts_help))
+        help_menu = menu_bar.addMenu(_t("&Help"))
+        help_menu.addAction(self._make_action(_t("Keyboard Shortcuts"), self.show_shortcuts_help))
 
     def _configure_shortcuts(self) -> None:
         shortcuts = {

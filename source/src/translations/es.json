@@ -22,8 +22,19 @@
 
   "Economy Editor": "Editor de economía",
   "Bus Route Planner": "Planificador de rutas de autobús",
+  "Bus Routes": "Rutas de autobús",
   "Transmission Editor": "Editor de transmisión",
+  "Transmissions": "Transmisiones",
   "Policy Editor": "Editor de políticas",
+  "Policies": "Políticas",
+  "Lua Mods": "Mods de Lua",
+
+  "Focus Search": "Enfocar búsqueda",
+  "Open Validation Inspector": "Abrir inspector de validación",
+  "Open Audio Inspector": "Abrir inspector de audio",
+  "Open Metadata Inspector": "Abrir inspector de metadatos",
+  "Open Activity Inspector": "Abrir inspector de actividad",
+  "Keyboard Shortcuts": "Atajos de teclado",
 
   "Cancel": "Cancelar",
   "Done": "Hecho",
@@ -35,6 +46,49 @@
   "Reset": "Restablecer",
 
   "Need Help?": "¿Necesitas ayuda?",
+
+  "MOD WORKSPACE": "ESPACIO DE TRABAJO DE MOD",
+  "Generated parts workspace": "Espacio de trabajo de piezas generadas",
+  "Waiting for local workspace bootstrap.": "Esperando arranque del espacio de trabajo local.",
+  "Starting local workspace...": "Iniciando espacio de trabajo local...",
+
+  "Generated Parts": "Piezas generadas",
+  "Engines 0": "Motores 0",
+  "Tires 0": "Neumáticos 0",
+
+  "Search": "Buscar",
+  "Search parts": "Buscar piezas",
+  "Filter": "Filtrar",
+  "All": "Todos",
+  "Engines": "Motores",
+  "Tires": "Neumáticos",
+
+  "WORKSPACE OVERVIEW": "RESUMEN DEL ESPACIO DE TRABAJO",
+  "Generated Parts Workspace": "Espacio de trabajo de piezas generadas",
+  "CURRENT PART": "PIEZA ACTUAL",
+  "DOCUMENT OVERVIEW": "RESUMEN DEL DOCUMENTO",
+  "Choose a generated part": "Elige una pieza generada",
+  "The overview summarises the selected part, its current risk status, and the next recommended actions.": "El resumen sintetiza la pieza seleccionada, su estado de riesgo actual y las próximas acciones recomendadas.",
+  "Current document snapshot": "Captura del documento actual",
+
+  "Contextual Inspector": "Inspector contextual",
+  "Selection context, validation, audio routing, and metadata stay visible here while you work.": "El contexto de la selección, la validación, el enrutamiento de audio y los metadatos permanecen visibles aquí mientras trabajas.",
+  "Choose a generated part to inspect validation status.": "Elige una pieza generada para inspeccionar el estado de validación.",
+  "Audio routing is available when an engine is selected.": "El enrutamiento de audio está disponible cuando se selecciona un motor.",
+  "Enable template override": "Activar anulación de plantilla",
+  "Current metadata and serialized surface for the selected part.": "Metadatos actuales y superficie serializada para la pieza seleccionada.",
+  "Recent session activity stays visible so pack, save, reload, and create operations are easier to audit.": "La actividad reciente de la sesión permanece visible para que las operaciones de empaquetar, guardar, recargar y crear sean más fáciles de auditar.",
+  "Session ready.": "Sesión lista.",
+  "No recent activity yet.": "Aún no hay actividad reciente.",
+  "Waiting for a document selection.": "Esperando una selección de documento.",
+
+  "Overview": "Resumen",
+  "Properties": "Propiedades",
+  "Curve": "Curva",
+  "Validation": "Validación",
+  "Audio": "Audio",
+  "Metadata": "Metadatos",
+  "Activity": "Actividad",
 
   "Customize Frog Mod Editor": "Personalizar Frog Mod Editor",
   "Customize": "Personalizar",
@@ -52,7 +106,13 @@
   "Default (100%)": "Predeterminado (100%)",
   "Large (115%)": "Grande (115%)",
   "Extra Large (130%)": "Extra grande (130%)",
+  "Huge (150%)": "Enorme (150%)",
+  "High-DPI (175%)": "Alta densidad (175%)",
+  "Maximum (200%)": "Máximo (200%)",
 
   "Language": "Idioma",
-  "Preferred interface language. Note: only English is currently translated. Selecting another language saves your preference but the UI stays in English until translation packs are added in a future update.": "Idioma preferido de la interfaz. Nota: solo el inglés y español están traducidos actualmente. Seleccionar otro idioma guarda tu preferencia pero la interfaz permanece en inglés hasta que se añadan paquetes de traducción en una actualización futura."
+  "Preferred interface language. Note: only English is currently translated. Selecting another language saves your preference but the UI stays in English until translation packs are added in a future update.": "Idioma preferido de la interfaz. Nota: solo el inglés y español están traducidos actualmente. Seleccionar otro idioma guarda tu preferencia pero la interfaz permanece en inglés hasta que se añadan paquetes de traducción en una actualización futura.",
+
+  "Restart Required": "Reinicio requerido",
+  "Language preference saved. Please restart Frog Mod Editor for the new language to take effect throughout the interface.": "Preferencia de idioma guardada. Reinicia Frog Mod Editor para que el nuevo idioma surta efecto en toda la interfaz."
 }
