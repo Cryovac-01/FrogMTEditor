@@ -21,6 +21,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 import customize_settings as _cs
 from .theme import apply_theme
 from . import theme_palette as _palette
+from . import scale as _scale
 
 
 # Local palette — matches the help dialog so the two popups feel
@@ -141,7 +142,7 @@ class CustomizeDialog(QtWidgets.QDialog):
         except Exception:
             self.setStyleSheet(_DIALOG_QSS)
         self.setModal(True)
-        self.resize(520, 540)
+        self.resize(_scale.sx(520), _scale.sx(540))
 
         self._initial = _cs.load()  # snapshot for revert-on-cancel
 

@@ -891,6 +891,10 @@ def apply_theme(app: QtWidgets.QApplication, *,
     # repaints see the new colours when they recompute.
     from . import theme_palette as _palette
     _palette.set_active(theme)
+    # Update the scale module so registered widgets get notified
+    # to re-apply their setFixedSize calls with the new scale.
+    from . import scale as _scale
+    _scale.set_active(ui_scale)
 
     app.setStyle("Fusion")
     apply_app_palette(app, theme)

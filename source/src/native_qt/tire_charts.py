@@ -40,6 +40,7 @@ import tire_analysis as _ta
 # getters resolve at call time, not import time, so a theme switch
 # is reflected on the next refresh().
 from . import theme_palette as _palette
+from . import scale as _scale
 
 
 def _street_color():  return _palette.qcolor('chart_street')
@@ -124,7 +125,7 @@ class InlineTireCharts(QtWidgets.QWidget):
         # 1. Temperature chart
         self._temp_chart = _new_chart("Grip vs Temperature")
         self._temp_view = _new_view(self._temp_chart)
-        self._temp_view.setFixedHeight(self.PANEL_HEIGHT)
+        self._temp_view.setFixedHeight(_scale.sx(self.PANEL_HEIGHT))
         self._temp_caption = _new_caption(
             "Approximated — Gaussian around TireTemperature, width driven by "
             "ThermalSensitivity. Shape is correct; absolute magnitude is the "
@@ -136,7 +137,7 @@ class InlineTireCharts(QtWidgets.QWidget):
         # 2. Load chart
         self._load_chart = _new_chart("Grip Factor vs Load")
         self._load_view = _new_view(self._load_chart)
-        self._load_view.setFixedHeight(self.PANEL_HEIGHT)
+        self._load_view.setFixedHeight(_scale.sx(self.PANEL_HEIGHT))
         self._load_caption = _new_caption(
             "Approximated — flat at 1.0 below the lower of (LoadRating, "
             "MaxLoad), declining linearly to 0.7 at the higher value, then "
@@ -148,7 +149,7 @@ class InlineTireCharts(QtWidgets.QWidget):
         # 3. Slip-angle chart
         self._slip_chart = _new_chart("Lateral Force vs Slip Angle")
         self._slip_view = _new_view(self._slip_chart)
-        self._slip_view.setFixedHeight(self.PANEL_HEIGHT)
+        self._slip_view.setFixedHeight(_scale.sx(self.PANEL_HEIGHT))
         self._slip_caption = _new_caption(
             "Math-grounded shape (Pacejka rational form). Higher Cornering "
             "Stiffness shifts the peak earlier and makes it sharper. "
@@ -161,7 +162,7 @@ class InlineTireCharts(QtWidgets.QWidget):
         # 4. Wear chart
         self._wear_chart = _new_chart("Tread Remaining vs Distance")
         self._wear_view = _new_view(self._wear_chart)
-        self._wear_view.setFixedHeight(self.PANEL_HEIGHT)
+        self._wear_view.setFixedHeight(_scale.sx(self.PANEL_HEIGHT))
         self._wear_caption = _new_caption(
             "Relative — baseline (WearRate = 0.01) wears 100% over 5,000 km. "
             "Lower WearRate lasts longer; higher rate wears faster. "
@@ -173,7 +174,7 @@ class InlineTireCharts(QtWidgets.QWidget):
 
         # 5. Stiffness profile (custom-painted, no QtCharts)
         self._stiff_panel = _StiffnessProfilePanel()
-        self._stiff_panel.setFixedHeight(self.PANEL_HEIGHT)
+        self._stiff_panel.setFixedHeight(_scale.sx(self.PANEL_HEIGHT))
         self._stiff_caption = _new_caption(
             "Five stiffness fields normalized to a 0–1 scale (1.0 = "
             "race-tire stiff). Lets you see the tire's 'shape' at a "
@@ -189,6 +190,23 @@ class InlineTireCharts(QtWidgets.QWidget):
         # listener can re-render with the new palette.
         self._last_refresh_args: Optional[tuple] = None
         _palette.register_listener(self._on_theme_changed)
+        # Re-apply panel heights when UI scale changes so all five
+        # charts grow uniformly with the user's File > Customize
+        # selection.
+        _scale.register_listener(self._on_scale_changed)
+
+    def _on_scale_changed(self) -> None:
+        """Push the new scaled height to each panel widget. QChart
+        doesn't recompute its preferred height on font changes, so
+        we set the new value explicitly."""
+        try:
+            new_h = _scale.sx(self.PANEL_HEIGHT)
+            for view in (self._temp_view, self._load_view,
+                         self._slip_view, self._wear_view,
+                         self._stiff_panel):
+                view.setFixedHeight(new_h)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     def _on_theme_changed(self) -> None:

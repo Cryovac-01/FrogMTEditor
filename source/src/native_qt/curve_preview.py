@@ -199,6 +199,7 @@ def synth_curve(max_rpm: float,
 # resolve the palette at call time, not at import time, so a theme
 # switch is reflected on the next refresh().
 from . import theme_palette as _palette
+from . import scale as _scale
 
 
 def _torque_color():  return _palette.qcolor('chart_torque')
@@ -221,7 +222,19 @@ class InlineCurvePreview(QtWidgets.QWidget):
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
 
-        self.setFixedHeight(self.PREVIEW_HEIGHT)
+        # Scale-aware height — grows with the user's UI scale
+        # selection in File > Customize.
+        self.setFixedHeight(_scale.sx(self.PREVIEW_HEIGHT))
+        _scale.register_listener(self._on_scale_changed)
+
+    def _on_scale_changed(self) -> None:
+        """Re-apply our fixed height when the user changes UI scale.
+        QChart doesn't recompute its preferred height on font changes,
+        so we have to push the new value explicitly."""
+        try:
+            self.setFixedHeight(_scale.sx(self.PREVIEW_HEIGHT))
+        except Exception:
+            pass
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

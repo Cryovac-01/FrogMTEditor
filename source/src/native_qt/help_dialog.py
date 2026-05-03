@@ -24,6 +24,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from help_content import get_topic
 from . import theme_palette as _palette
+from . import scale as _scale
 
 
 # Visual constants resolved at call time from the central palette so
@@ -139,7 +140,7 @@ class HelpDialog(QtWidgets.QDialog):
             self.setStyleSheet(_palette.build_dialog_qss())
         except Exception:
             self.setStyleSheet(_DIALOG_QSS)
-        self.resize(1100, 720)
+        self.resize(_scale.sx(1100), _scale.sx(720))
 
         self._build_ui()
         self._populate_tree()
