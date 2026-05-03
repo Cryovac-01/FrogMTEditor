@@ -731,7 +731,82 @@ def build_creator_grid_card(
     return card, body_layout
 
 
-def apply_app_palette(app: QtWidgets.QApplication) -> None:
+# ──────────────────────────────────────────────────────────────────────
+# Theme variants — appended over the base dark QSS to recolour
+# without rewriting every selector. Each variant is a self-contained
+# QSS string applied via app.setStyleSheet AFTER the base sheet.
+# ──────────────────────────────────────────────────────────────────────
+_LIGHT_VARIANT_QSS = """
+/* Light theme overrides — applied on top of the dark base.
+   Keeps the existing QSS structure but inverts background and text
+   so users can choose between dark / light without a full reskin.
+   The accent green is kept (works on both light and dark backgrounds).
+*/
+QWidget { background-color: #f1f3f6; color: #1c2330; }
+QFrame, QGroupBox, QScrollArea, QStackedWidget { background-color: #f1f3f6; color: #1c2330; }
+QLabel { color: #1c2330; background: transparent; }
+QPushButton { background: #ffffff; color: #1c2330; border: 1px solid #c8d0d9; }
+QPushButton:hover { border-color: #73c686; color: #2a5a32; }
+QLineEdit, QComboBox, QPlainTextEdit, QTextBrowser {
+    background: #ffffff; color: #1c2330; border: 1px solid #c8d0d9;
+}
+QLineEdit:focus, QComboBox:focus { border-color: #73c686; }
+QHeaderView::section { background: #e2e7ee; color: #1c2330; border: 1px solid #c8d0d9; }
+QTableView, QTreeView, QListView {
+    background: #ffffff; color: #1c2330;
+    alternate-background-color: #f7f9fb;
+    selection-background-color: #c2e8c8; selection-color: #0b2310;
+}
+QMenu { background: #ffffff; color: #1c2330; border: 1px solid #c8d0d9; }
+QMenu::item:selected { background: #c2e8c8; color: #0b2310; }
+QMenuBar { background: #e2e7ee; color: #1c2330; }
+QMenuBar::item:selected { background: #c2e8c8; color: #0b2310; }
+QToolTip { background: #ffffff; color: #1c2330; border: 1px solid #c8d0d9; }
+QSplitter::handle { background: #c8d0d9; }
+"""
+
+_HIGH_CONTRAST_VARIANT_QSS = """
+/* High-contrast theme — pure black background, pure white text,
+   bright yellow accent. Designed for accessibility (low-vision
+   users) and bright-light environments where dark UI is unreadable.
+   Borders are intentionally thick to make element boundaries
+   unambiguous.
+*/
+QWidget { background-color: #000000; color: #ffffff; }
+QFrame, QGroupBox, QScrollArea, QStackedWidget { background-color: #000000; color: #ffffff; }
+QLabel { color: #ffffff; background: transparent; }
+QPushButton {
+    background: #000000; color: #ffff00;
+    border: 2px solid #ffff00; padding: 6px 12px;
+    font-weight: bold;
+}
+QPushButton:hover { background: #ffff00; color: #000000; }
+QLineEdit, QComboBox, QPlainTextEdit, QTextBrowser {
+    background: #000000; color: #ffffff;
+    border: 2px solid #ffffff; padding: 4px;
+}
+QLineEdit:focus, QComboBox:focus { border-color: #ffff00; }
+QHeaderView::section {
+    background: #000000; color: #ffff00;
+    border: 2px solid #ffff00; font-weight: bold;
+}
+QTableView, QTreeView, QListView {
+    background: #000000; color: #ffffff;
+    alternate-background-color: #1a1a1a;
+    selection-background-color: #ffff00; selection-color: #000000;
+}
+QMenu { background: #000000; color: #ffffff; border: 2px solid #ffffff; }
+QMenu::item:selected { background: #ffff00; color: #000000; }
+QMenuBar { background: #000000; color: #ffffff; border-bottom: 2px solid #ffffff; }
+QMenuBar::item:selected { background: #ffff00; color: #000000; }
+QToolTip { background: #000000; color: #ffff00; border: 2px solid #ffff00; }
+QSplitter::handle { background: #ffffff; }
+"""
+
+
+def _apply_dark_palette(app: QtWidgets.QApplication) -> None:
+    """The original dark-theme palette — unchanged from the
+    pre-customize-feature baseline."""
     palette = QtGui.QPalette()
     palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor("#0b1117"))
     palette.setColor(QtGui.QPalette.ColorRole.WindowText, TEXT_COLOR)
@@ -749,11 +824,101 @@ def apply_app_palette(app: QtWidgets.QApplication) -> None:
     app.setPalette(palette)
 
 
-def apply_theme(app: QtWidgets.QApplication) -> None:
+def _apply_light_palette(app: QtWidgets.QApplication) -> None:
+    palette = QtGui.QPalette()
+    palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor("#f1f3f6"))
+    palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtGui.QColor("#1c2330"))
+    palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor("#ffffff"))
+    palette.setColor(QtGui.QPalette.ColorRole.AlternateBase, QtGui.QColor("#e7ecf2"))
+    palette.setColor(QtGui.QPalette.ColorRole.ToolTipBase, QtGui.QColor("#ffffff"))
+    palette.setColor(QtGui.QPalette.ColorRole.ToolTipText, QtGui.QColor("#1c2330"))
+    palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#1c2330"))
+    palette.setColor(QtGui.QPalette.ColorRole.Button, QtGui.QColor("#ffffff"))
+    palette.setColor(QtGui.QPalette.ColorRole.ButtonText, QtGui.QColor("#1c2330"))
+    palette.setColor(QtGui.QPalette.ColorRole.BrightText, QtGui.QColor("#000000"))
+    palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor("#73c686"))
+    palette.setColor(QtGui.QPalette.ColorRole.HighlightedText, QtGui.QColor("#0b2310"))
+    palette.setColor(QtGui.QPalette.ColorRole.PlaceholderText, QtGui.QColor("#7d8693"))
+    app.setPalette(palette)
+
+
+def _apply_high_contrast_palette(app: QtWidgets.QApplication) -> None:
+    palette = QtGui.QPalette()
+    palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor("#000000"))
+    palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtGui.QColor("#ffffff"))
+    palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor("#000000"))
+    palette.setColor(QtGui.QPalette.ColorRole.AlternateBase, QtGui.QColor("#1a1a1a"))
+    palette.setColor(QtGui.QPalette.ColorRole.ToolTipBase, QtGui.QColor("#000000"))
+    palette.setColor(QtGui.QPalette.ColorRole.ToolTipText, QtGui.QColor("#ffff00"))
+    palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#ffffff"))
+    palette.setColor(QtGui.QPalette.ColorRole.Button, QtGui.QColor("#000000"))
+    palette.setColor(QtGui.QPalette.ColorRole.ButtonText, QtGui.QColor("#ffff00"))
+    palette.setColor(QtGui.QPalette.ColorRole.BrightText, QtGui.QColor("#ffffff"))
+    palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor("#ffff00"))
+    palette.setColor(QtGui.QPalette.ColorRole.HighlightedText, QtGui.QColor("#000000"))
+    palette.setColor(QtGui.QPalette.ColorRole.PlaceholderText, QtGui.QColor("#808080"))
+    app.setPalette(palette)
+
+
+def apply_app_palette(app: QtWidgets.QApplication, theme: str = 'dark') -> None:
+    """Apply the platform palette for *theme*. Falls back to dark
+    on unknown values."""
+    if theme == 'light':
+        _apply_light_palette(app)
+    elif theme == 'high_contrast':
+        _apply_high_contrast_palette(app)
+    else:
+        _apply_dark_palette(app)
+
+
+def apply_theme(app: QtWidgets.QApplication, *,
+                theme: str = 'dark', ui_scale: float = 1.0) -> None:
+    """Apply the requested theme + UI scale to the app.
+
+    ``theme`` is one of 'dark' | 'light' | 'high_contrast'. The base
+    QSS in native_qt_theme.qss is loaded first, then the variant's
+    overrides are appended (for non-dark themes).
+
+    ``ui_scale`` is a font-size multiplier. Qt scales most widget
+    metrics from font metrics, so adjusting the app font size is the
+    cheapest way to scale the whole UI uniformly.
+    """
     app.setStyle("Fusion")
-    apply_app_palette(app)
+    apply_app_palette(app, theme)
+
+    base_qss = ""
     if THEME_PATH.is_file():
-        app.setStyleSheet(THEME_PATH.read_text(encoding="utf-8"))
+        base_qss = THEME_PATH.read_text(encoding="utf-8")
+
+    if theme == 'light':
+        app.setStyleSheet(base_qss + "\n" + _LIGHT_VARIANT_QSS)
+    elif theme == 'high_contrast':
+        app.setStyleSheet(base_qss + "\n" + _HIGH_CONTRAST_VARIANT_QSS)
+    else:
+        app.setStyleSheet(base_qss)
+
+    # UI scale via app font. Qt computes most widget sizes from font
+    # metrics so this scales button heights, padding, etc. — not
+    # perfect (some widgets have hardcoded pixel sizes) but good
+    # enough for accessibility purposes.
+    if abs(ui_scale - 1.0) > 0.01:
+        font = app.font()
+        # Compute the scaled point size from the unscaled baseline.
+        # We multiply the platform default (usually 9 or 10pt) — not
+        # the current font size — so applying scale repeatedly
+        # doesn't compound.
+        baseline_pt = float(app.property('baselineFontPt') or font.pointSizeF() or 9)
+        if app.property('baselineFontPt') is None:
+            app.setProperty('baselineFontPt', baseline_pt)
+        font.setPointSizeF(baseline_pt * ui_scale)
+        app.setFont(font)
+    else:
+        # Restore baseline if we previously scaled
+        baseline_pt = app.property('baselineFontPt')
+        if baseline_pt is not None:
+            font = app.font()
+            font.setPointSizeF(float(baseline_pt))
+            app.setFont(font)
 
 
 @functools.lru_cache(maxsize=64)

@@ -855,6 +855,11 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         file_menu.addAction(self._make_action("Pack Templates", self.pack_templates, shortcut="Ctrl+Shift+P"))
         file_menu.addSeparator()
         file_menu.addAction(self._make_action("Quick Actions", self.open_quick_actions, shortcut="Ctrl+K"))
+        file_menu.addSeparator()
+        # Customize: theme / UI scale / language popup. Opens via a
+        # modal dialog that re-applies the theme live and persists
+        # the choice to data/customize_settings.json.
+        file_menu.addAction(self._make_action("Customize…", self.open_customize_dialog))
 
         create_menu = menu_bar.addMenu("&Create")
         create_menu.addAction(self._make_action("New Engine", self.open_engine_creator, shortcut="Ctrl+Shift+N"))
@@ -918,6 +923,12 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
                 ]
             ),
         )
+
+    def open_customize_dialog(self) -> None:
+        """Open the Customize popup (theme / UI scale / language).
+        See native_qt/customize_dialog.py for details."""
+        from .customize_dialog import open_customize_dialog
+        open_customize_dialog(self)
 
     def open_quick_actions(self) -> None:
         dialog = QuickActionDialog(

@@ -35,7 +35,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     logging.info("native qt app start smoke_test=%s", smoke_test)
     app = QtWidgets.QApplication(sys.argv[:1])
-    apply_theme(app)
+    # Honour persisted theme + UI-scale preferences on startup. The
+    # Customize dialog (File > Customize) writes to this same file.
+    from customize_settings import load as _load_customize
+    _cfg = _load_customize()
+    apply_theme(app, theme=_cfg.get('theme', 'dark'),
+                ui_scale=_cfg.get('ui_scale', 1.0))
     service = NativeEditorService()
     window = NativeQtEditorWindow(service, smoke_test=smoke_test)
 
