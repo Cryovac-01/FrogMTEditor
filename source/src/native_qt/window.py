@@ -10,6 +10,7 @@ from .bus_route_panel import BusRouteConfigPanel
 from .transmission_panel import TransmissionEditorPanel
 from .policy_panel import PolicyEditorPanel
 from .lua_scripts_panel import LuaScriptsPanel
+from .help_dialog import make_need_help_header
 
 class NativeQtEditorWindow(QtWidgets.QMainWindow):
     def __init__(self, service: NativeEditorService, smoke_test: bool = False) -> None:
@@ -472,6 +473,10 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         workspace_layout = QtWidgets.QVBoxLayout(workspace_page)
         set_widget_margins(workspace_layout)
         workspace_layout.setSpacing(SPACING.md)
+        # Need-Help header — anchored at the top, opens a popup
+        # with detailed per-page help. Same widget pattern is used
+        # on every editor page so users always know where to look.
+        workspace_layout.addWidget(make_need_help_header('workspace', workspace_page))
 
         header_card = QtWidgets.QFrame()
         set_surface(header_card, "card")
@@ -696,6 +701,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         creator_layout = QtWidgets.QVBoxLayout(creator_page)
         creator_layout.setContentsMargins(0, 0, 0, 0)
         creator_layout.setSpacing(0)
+        creator_layout.addWidget(make_need_help_header('creator', creator_page))
         self.creator_workspace = CreatorWorkspace(self, self.service)
         self.creator_workspace.cancel_requested.connect(self.cancel_creator_mode)
         self.creator_workspace.created.connect(self.on_part_created)
@@ -707,6 +713,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         economy_layout = QtWidgets.QVBoxLayout(economy_page)
         economy_layout.setContentsMargins(0, 0, 0, 0)
         economy_layout.setSpacing(0)
+        economy_layout.addWidget(make_need_help_header('economy', economy_page))
         self.economy_panel = EconomyEditorPanel()
         self.economy_panel.economy_applied.connect(self._on_economy_applied)
         economy_layout.addWidget(self.economy_panel)
@@ -717,6 +724,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         bus_route_layout = QtWidgets.QVBoxLayout(bus_route_page)
         bus_route_layout.setContentsMargins(0, 0, 0, 0)
         bus_route_layout.setSpacing(0)
+        bus_route_layout.addWidget(make_need_help_header('bus_route', bus_route_page))
         self.bus_route_panel = BusRouteConfigPanel()
         bus_route_layout.addWidget(self.bus_route_panel)
         self.stack.addWidget(bus_route_page)
@@ -726,6 +734,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         transmission_layout = QtWidgets.QVBoxLayout(transmission_page)
         transmission_layout.setContentsMargins(0, 0, 0, 0)
         transmission_layout.setSpacing(0)
+        transmission_layout.addWidget(make_need_help_header('transmission', transmission_page))
         self.transmission_panel = TransmissionEditorPanel()
         self.transmission_panel.transmission_created.connect(self._on_transmission_created)
         transmission_layout.addWidget(self.transmission_panel)
@@ -736,6 +745,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         policy_layout = QtWidgets.QVBoxLayout(policy_page)
         policy_layout.setContentsMargins(0, 0, 0, 0)
         policy_layout.setSpacing(0)
+        policy_layout.addWidget(make_need_help_header('policy', policy_page))
         self.policy_panel = PolicyEditorPanel()
         self.policy_panel.policy_applied.connect(self._on_policy_applied)
         policy_layout.addWidget(self.policy_panel)
@@ -746,6 +756,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         lua_scripts_layout = QtWidgets.QVBoxLayout(lua_scripts_page)
         lua_scripts_layout.setContentsMargins(0, 0, 0, 0)
         lua_scripts_layout.setSpacing(0)
+        lua_scripts_layout.addWidget(make_need_help_header('lua_scripts', lua_scripts_page))
         self.lua_scripts_panel = LuaScriptsPanel()
         lua_scripts_layout.addWidget(self.lua_scripts_panel)
         self.stack.addWidget(lua_scripts_page)
