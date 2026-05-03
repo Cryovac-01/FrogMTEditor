@@ -5,10 +5,19 @@ The dialog reads + writes ``customize_settings.json`` via the
 
   - Theme + UI scale  → re-apply at runtime via ``apply_theme(app, ...)``,
                         no restart required.
-  - Language          → preference is saved, but actual translation
-                        is English-only for now (no .qm translation
-                        packs shipped yet). The dialog tells the user
-                        this honestly.
+  - Language          → preference is saved + activated immediately
+                        for any *new* widgets (e.g. Help dialogs
+                        opened after the change). Already-built
+                        widgets — most importantly the menu bar —
+                        only re-translate after restart, so the
+                        dialog pops a one-time "restart required"
+                        notice when the user picks a different
+                        language than the one the app booted into.
+                        Languages with a real translation pack in
+                        ``src/translations/<code>.json`` are listed
+                        without a "translation pending" suffix; the
+                        rest get the suffix so the user knows which
+                        ones are aspirational.
 
 Modal QDialog; pops via ``open_customize_dialog(parent)``.
 """
@@ -212,6 +221,9 @@ class CustomizeDialog(QtWidgets.QDialog):
             (1.00, _t('Default (100%)')),
             (1.15, _t('Large (115%)')),
             (1.30, _t('Extra Large (130%)')),
+            (1.50, _t('Huge (150%)')),
+            (1.75, _t('High-DPI (175%)')),
+            (2.00, _t('Maximum (200%)')),
         ):
             self._scale_combo.addItem(label, value)
         self._scale_combo.currentIndexChanged.connect(self._on_scale_changed)
@@ -231,10 +243,13 @@ class CustomizeDialog(QtWidgets.QDialog):
         lang_hint.setProperty('role', 'hint')
         lang_hint.setWordWrap(True)
         lang_layout.addWidget(lang_hint)
+        # Probe the translations dir so the UI honestly tells the user
+        # which languages have a real pack vs. preference-only.
+        translated_codes = self._discover_translated_codes()
         self._lang_combo = QtWidgets.QComboBox()
         for code in _cs.VALID_LANGUAGES:
             label = _cs.LANGUAGE_LABELS.get(code, code)
-            if code != 'en':
+            if code != 'en' and code not in translated_codes:
                 label += '  (translation pending)'
             self._lang_combo.addItem(label, code)
         self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
@@ -323,19 +338,57 @@ class CustomizeDialog(QtWidgets.QDialog):
     def _on_scale_changed(self, _index: int = 0) -> None:
         self._apply_now()
 
+    @staticmethod
+    def _discover_translated_codes() -> set:
+        """Scan src/translations/ for *.json packs and return the set
+        of ISO codes that have a real translation file shipped."""
+        try:
+            import os as _os
+            from i18n import TRANSLATIONS_DIR
+            if not _os.path.isdir(TRANSLATIONS_DIR):
+                return set()
+            return {
+                _os.path.splitext(name)[0].lower()
+                for name in _os.listdir(TRANSLATIONS_DIR)
+                if name.endswith('.json')
+            }
+        except Exception:
+            return set()
+
     def _on_language_changed(self, _index: int = 0) -> None:
         # Activate the new language immediately so newly-built widgets
         # (e.g. the Help dialog opened after this change) pick it up.
-        # Already-rendered widgets stay in the old language until the
-        # app is restarted — Qt doesn't have a clean "re-translate
-        # the live tree" API for our pattern. The user sees this
-        # acknowledged via the "translation pending" suffix on
-        # non-English picks.
+        # Already-rendered widgets — most importantly the menu bar
+        # built once at startup — stay in the old language until the
+        # app is restarted. Qt doesn't expose a clean "re-translate
+        # the live tree" hook for our manual _t() pattern, so we tell
+        # the user honestly that a restart is required for the new
+        # language to flow through every existing widget.
+        new_code = str(self._lang_combo.currentData() or 'en')
+        initial_code = str(self._initial.get('language', 'en'))
         try:
             from i18n import set_language
-            set_language(str(self._lang_combo.currentData() or 'en'))
+            set_language(new_code)
         except Exception:
             pass
+        # Only prompt if the user actually picked something different
+        # from what the app booted into — flipping back to the start
+        # language doesn't need a restart.
+        if new_code != initial_code and not getattr(self, '_lang_warned', False):
+            self._lang_warned = True
+            try:
+                box = QtWidgets.QMessageBox(self)
+                box.setIcon(QtWidgets.QMessageBox.Icon.Information)
+                box.setWindowTitle(_t("Restart Required"))
+                box.setText(_t(
+                    "Language preference saved. Please restart "
+                    "Frog Mod Editor for the new language to take "
+                    "effect throughout the interface."
+                ))
+                box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Ok)
+                box.exec()
+            except Exception:
+                pass
 
     # ── Footer actions ──
     def _refresh_dialog_qss(self) -> None:

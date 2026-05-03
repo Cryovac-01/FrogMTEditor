@@ -32,7 +32,10 @@ SETTINGS_PATH = os.path.join(_PROJECT_ROOT, 'data', 'customize_settings.json')
 
 
 VALID_THEMES = ('dark', 'light', 'high_contrast')
-VALID_SCALES = (0.85, 1.00, 1.15, 1.30)
+# UI scale presets — multiplier applied to font sizes + scaled
+# widget metrics. Top end (200%) supports 4K / high-DPI displays
+# where the default 100% renders at sub-readable sizes.
+VALID_SCALES = (0.85, 1.00, 1.15, 1.30, 1.50, 1.75, 2.00)
 # Language pool — UI is built around these. Translations themselves
 # aren't wired yet (English-only for now); selecting a non-English
 # language saves the preference but the app stays in English until

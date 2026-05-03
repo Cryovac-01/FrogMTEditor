@@ -741,6 +741,12 @@ _LIGHT_VARIANT_QSS = """
    Keeps the existing QSS structure but inverts background and text
    so users can choose between dark / light without a full reskin.
    The accent green is kept (works on both light and dark backgrounds).
+
+   QMenu::item and QMenuBar::item are MORE specific than QMenu /
+   QMenuBar in the base QSS, so they need their own override rules
+   here — otherwise the base sheet's dark colours would win and the
+   menu items would render as dark-on-light (the menu's own
+   background) → unreadable.
 */
 QWidget { background-color: #f1f3f6; color: #1c2330; }
 QFrame, QGroupBox, QScrollArea, QStackedWidget { background-color: #f1f3f6; color: #1c2330; }
@@ -757,10 +763,17 @@ QTableView, QTreeView, QListView {
     alternate-background-color: #f7f9fb;
     selection-background-color: #c2e8c8; selection-color: #0b2310;
 }
-QMenu { background: #ffffff; color: #1c2330; border: 1px solid #c8d0d9; }
-QMenu::item:selected { background: #c2e8c8; color: #0b2310; }
-QMenuBar { background: #e2e7ee; color: #1c2330; }
+/* Menu bar: pale-blue strip; item text dark for readability. */
+QMenuBar { background: #e2e7ee; color: #1c2330; border: 1px solid #c8d0d9; }
+QMenuBar::item { background: transparent; color: #1c2330; padding: 6px 10px; }
 QMenuBar::item:selected { background: #c2e8c8; color: #0b2310; }
+QMenuBar::item:pressed { background: #a8dbb0; color: #0b2310; }
+/* Drop-down menus: white panel, dark item text, green selection. */
+QMenu { background: #ffffff; color: #1c2330; border: 1px solid #c8d0d9; padding: 6px; }
+QMenu::item { background: transparent; color: #1c2330; padding: 7px 22px 7px 12px; border-radius: 4px; }
+QMenu::item:selected { background: #c2e8c8; color: #0b2310; }
+QMenu::item:disabled { color: #8a93a0; }
+QMenu::separator { background: #c8d0d9; height: 1px; margin: 4px 6px; }
 QToolTip { background: #ffffff; color: #1c2330; border: 1px solid #c8d0d9; }
 QSplitter::handle { background: #c8d0d9; }
 """
@@ -771,6 +784,10 @@ _HIGH_CONTRAST_VARIANT_QSS = """
    users) and bright-light environments where dark UI is unreadable.
    Borders are intentionally thick to make element boundaries
    unambiguous.
+
+   QMenu::item / QMenuBar::item need explicit overrides too —
+   otherwise the base QSS's dark text colour wins on specificity
+   and the menu items become invisible.
 */
 QWidget { background-color: #000000; color: #ffffff; }
 QFrame, QGroupBox, QScrollArea, QStackedWidget { background-color: #000000; color: #ffffff; }
@@ -795,10 +812,17 @@ QTableView, QTreeView, QListView {
     alternate-background-color: #1a1a1a;
     selection-background-color: #ffff00; selection-color: #000000;
 }
-QMenu { background: #000000; color: #ffffff; border: 2px solid #ffffff; }
-QMenu::item:selected { background: #ffff00; color: #000000; }
+/* Menu bar: black strip, white item text, yellow selection. */
 QMenuBar { background: #000000; color: #ffffff; border-bottom: 2px solid #ffffff; }
+QMenuBar::item { background: transparent; color: #ffffff; padding: 6px 10px; font-weight: bold; }
 QMenuBar::item:selected { background: #ffff00; color: #000000; }
+QMenuBar::item:pressed { background: #ffff00; color: #000000; }
+/* Drop-down menus: black panel, white item text, yellow selection. */
+QMenu { background: #000000; color: #ffffff; border: 2px solid #ffffff; padding: 6px; }
+QMenu::item { background: transparent; color: #ffffff; padding: 7px 22px 7px 12px; font-weight: bold; }
+QMenu::item:selected { background: #ffff00; color: #000000; }
+QMenu::item:disabled { color: #888888; }
+QMenu::separator { background: #ffffff; height: 1px; margin: 4px 6px; }
 QToolTip { background: #000000; color: #ffff00; border: 2px solid #ffff00; }
 QSplitter::handle { background: #ffffff; }
 """
@@ -903,6 +927,27 @@ def apply_theme(app: QtWidgets.QApplication, *,
     if THEME_PATH.is_file():
         base_qss = THEME_PATH.read_text(encoding="utf-8")
 
+    # ── UI scale: multiply every font-size in the QSS by ui_scale ──
+    # The QSS file has hardcoded font-size: Npt rules that win over
+    # app.setFont(), so scaling needs to happen INSIDE the QSS too.
+    # We apply the multiplier to every match of "font-size: Npt" and
+    # rebuild the stylesheet from the scaled version.
+    if abs(ui_scale - 1.0) > 0.01:
+        import re as _re
+
+        def _scale_font_pt(match):
+            try:
+                size = float(match.group(1))
+                return f'font-size: {size * ui_scale:.2f}pt'
+            except (TypeError, ValueError):
+                return match.group(0)
+
+        base_qss = _re.sub(
+            r'font-size:\s*(\d+(?:\.\d+)?)\s*pt',
+            _scale_font_pt,
+            base_qss,
+        )
+
     if theme == 'light':
         app.setStyleSheet(base_qss + "\n" + _LIGHT_VARIANT_QSS)
     elif theme == 'high_contrast':
@@ -910,10 +955,9 @@ def apply_theme(app: QtWidgets.QApplication, *,
     else:
         app.setStyleSheet(base_qss)
 
-    # UI scale via app font. Qt computes most widget sizes from font
-    # metrics so this scales button heights, padding, etc. — not
-    # perfect (some widgets have hardcoded pixel sizes) but good
-    # enough for accessibility purposes.
+    # ── UI scale: also apply to app font for non-QSS-styled widgets ──
+    # Qt computes most widget metrics from font height, so scaling the
+    # app font catches widgets that don't get a font-size from QSS.
     if abs(ui_scale - 1.0) > 0.01:
         font = app.font()
         # Compute the scaled point size from the unscaled baseline.
