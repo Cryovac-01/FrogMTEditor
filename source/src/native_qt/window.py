@@ -243,9 +243,9 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         sidebar_counts = QtWidgets.QHBoxLayout()
         sidebar_counts.setContentsMargins(0, 0, 0, 0)
         sidebar_counts.setSpacing(8)
-        self.engine_count_badge = QtWidgets.QLabel("Engines 0")
+        self.engine_count_badge = QtWidgets.QLabel(_t("Engines 0"))
         set_label_kind(self.engine_count_badge, "pill")
-        self.tire_count_badge = QtWidgets.QLabel("Tires 0")
+        self.tire_count_badge = QtWidgets.QLabel(_t("Tires 0"))
         set_label_kind(self.tire_count_badge, "pill")
         sidebar_counts.addWidget(self.engine_count_badge)
         sidebar_counts.addWidget(self.tire_count_badge)
@@ -565,9 +565,9 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         overview_intro_layout.setSpacing(SPACING.xs)
         overview_eyebrow = QtWidgets.QLabel(_t("DOCUMENT OVERVIEW"))
         set_label_kind(overview_eyebrow, "eyebrow")
-        self.overview_title_label = QtWidgets.QLabel(_t("Choose a generated part"))
+        self.overview_title_label = QtWidgets.QLabel(_t(_t("Choose a generated part")))
         set_label_kind(self.overview_title_label, "section")
-        self.overview_body_label = QtWidgets.QLabel("The overview summarises the selected part, its current risk status, and the next recommended actions.")
+        self.overview_body_label = QtWidgets.QLabel(_t("The overview summarises the selected part, its current risk status, and the next recommended actions."))
         self.overview_body_label.setWordWrap(True)
         set_label_kind(self.overview_body_label, "muted")
         overview_intro_layout.addWidget(overview_eyebrow)
@@ -620,7 +620,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         inspector_layout.setSpacing(SPACING.sm)
         inspector_title = QtWidgets.QLabel(_t("Contextual Inspector"))
         set_label_kind(inspector_title, "section")
-        self.inspector_summary_label = QtWidgets.QLabel("Selection context, validation, audio routing, and metadata stay visible here while you work.")
+        self.inspector_summary_label = QtWidgets.QLabel(_t("Selection context, validation, audio routing, and metadata stay visible here while you work."))
         self.inspector_summary_label.setWordWrap(True)
         set_label_kind(self.inspector_summary_label, "muted")
         inspector_layout.addWidget(inspector_title)
@@ -634,7 +634,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         validation_layout = QtWidgets.QVBoxLayout(validation_tab)
         validation_layout.setContentsMargins(SPACING.sm, SPACING.sm, SPACING.sm, SPACING.sm)
         validation_layout.setSpacing(SPACING.sm)
-        self.validation_status_label = QtWidgets.QLabel("Choose a generated part to inspect validation status.")
+        self.validation_status_label = QtWidgets.QLabel(_t("Choose a generated part to inspect validation status."))
         self.validation_status_label.setWordWrap(True)
         set_label_kind(self.validation_status_label, "notice")
         self.validation_counts_label = QtWidgets.QLabel("")
@@ -652,7 +652,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         audio_layout = QtWidgets.QVBoxLayout(audio_tab)
         audio_layout.setContentsMargins(SPACING.sm, SPACING.sm, SPACING.sm, SPACING.sm)
         audio_layout.setSpacing(SPACING.sm)
-        self.audio_summary_label = QtWidgets.QLabel("Audio routing is available when an engine is selected.")
+        self.audio_summary_label = QtWidgets.QLabel(_t("Audio routing is available when an engine is selected."))
         self.audio_summary_label.setWordWrap(True)
         set_label_kind(self.audio_summary_label, "muted")
         audio_actions = QtWidgets.QHBoxLayout()
@@ -685,7 +685,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         metadata_layout = QtWidgets.QVBoxLayout(metadata_tab)
         metadata_layout.setContentsMargins(SPACING.sm, SPACING.sm, SPACING.sm, SPACING.sm)
         metadata_layout.setSpacing(SPACING.sm)
-        metadata_intro = QtWidgets.QLabel("Current metadata and serialized surface for the selected part.")
+        metadata_intro = QtWidgets.QLabel(_t("Current metadata and serialized surface for the selected part."))
         metadata_intro.setWordWrap(True)
         set_label_kind(metadata_intro, "muted")
         self.metadata_tree = build_key_value_tree("Metadata", "Value")
@@ -697,7 +697,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         activity_layout = QtWidgets.QVBoxLayout(activity_tab)
         activity_layout.setContentsMargins(SPACING.sm, SPACING.sm, SPACING.sm, SPACING.sm)
         activity_layout.setSpacing(SPACING.sm)
-        activity_intro = QtWidgets.QLabel("Recent session activity stays visible so pack, save, reload, and create operations are easier to audit.")
+        activity_intro = QtWidgets.QLabel(_t("Recent session activity stays visible so pack, save, reload, and create operations are easier to audit."))
         activity_intro.setWordWrap(True)
         set_label_kind(activity_intro, "muted")
         self.history_list = QtWidgets.QListWidget()
@@ -790,10 +790,10 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         activity_rail_layout = QtWidgets.QHBoxLayout(self.activity_rail)
         activity_rail_layout.setContentsMargins(SPACING.md, SPACING.xs, SPACING.md, SPACING.xs)
         activity_rail_layout.setSpacing(SPACING.sm)
-        self.activity_state_label = QtWidgets.QLabel("Session ready.")
+        self.activity_state_label = QtWidgets.QLabel(_t("Session ready."))
         self.activity_state_label.setWordWrap(True)
         set_label_kind(self.activity_state_label, "notice")
-        self.activity_preview_label = QtWidgets.QLabel("No recent activity yet.")
+        self.activity_preview_label = QtWidgets.QLabel(_t("No recent activity yet."))
         self.activity_preview_label.setWordWrap(True)
         set_label_kind(self.activity_preview_label, "muted")
         activity_rail_layout.addWidget(self.activity_state_label, 2)
@@ -1289,7 +1289,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         if not self.activity_history:
             self.history_list.addItem("No session activity yet.")
             if hasattr(self, "activity_preview_label"):
-                self.activity_preview_label.setText("No recent activity yet.")
+                self.activity_preview_label.setText(_t("No recent activity yet."))
             return
         for row in self.activity_history:
             self.history_list.addItem(row)
@@ -1306,15 +1306,15 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
             return
         if not self.current_part:
             if has_external_changes:
-                self.header_notice_label.setText("External live data changed. Reload the workspace before making new edits.")
+                self.header_notice_label.setText(_t("External live data changed. Reload the workspace before making new edits."))
                 set_label_kind(self.header_notice_label, "warning")
             else:
-                self.header_notice_label.setText("Choose a generated part from the left rail or create one from a curated donor template.")
+                self.header_notice_label.setText(_t("Choose a generated part from the left rail or create one from a curated donor template."))
                 set_label_kind(self.header_notice_label, "notice")
             if hasattr(self, "inspector_summary_label"):
-                self.inspector_summary_label.setText("No document selected. Use the navigator to inspect a generated part or start a new asset flow.")
+                self.inspector_summary_label.setText(_t("No document selected. Use the navigator to inspect a generated part or start a new asset flow."))
             if hasattr(self, "activity_state_label"):
-                self.activity_state_label.setText("Waiting for a document selection.")
+                self.activity_state_label.setText(_t("Waiting for a document selection."))
             refresh_style(self.header_notice_label)
             self.refresh_overview_panel()
             self.refresh_diagnostics()
@@ -1549,7 +1549,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
             subtitle_bits.append("Tire")
             subtitle_bits.append((document.group_label if document else "") or str(metadata.get("group_label") or metadata.get("family") or ""))
         self.part_subtitle_label.setText("  •  ".join(bit for bit in subtitle_bits if bit))
-        self.part_hint_label.setText("Edits stay local until you save them into generated data.")
+        self.part_hint_label.setText(_t("Edits stay local until you save them into generated data."))
 
         if not detail:
             self._clear_metrics()
@@ -1613,8 +1613,8 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
 
     def refresh_overview_panel(self) -> None:
         if not self.current_part or not self.current_document:
-            self.overview_title_label.setText("Choose a generated part")
-            self.overview_body_label.setText("The overview summarises the selected part, its current risk status, and the next recommended actions.")
+            self.overview_title_label.setText(_t("Choose a generated part"))
+            self.overview_body_label.setText(_t("The overview summarises the selected part, its current risk status, and the next recommended actions."))
             self._set_overview_metrics([])
             populate_key_value_tree(self.overview_tree, [], empty_message="No document selected.")
             return
@@ -1675,7 +1675,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         self.validation_list.clear()
         self.validation_counts_label.setText("")
         if not self.current_part:
-            self.validation_status_label.setText("Choose a generated part to inspect validation status.")
+            self.validation_status_label.setText(_t("Choose a generated part to inspect validation status."))
             set_label_kind(self.validation_status_label, "notice")
             refresh_style(self.validation_status_label)
             self.validation_list.addItem("Validation results will appear here.")
@@ -1696,7 +1696,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
                     summary.append(f"{warning_count} warning")
                 if notice_count:
                     summary.append(f"{notice_count} notice")
-                self.validation_status_label.setText("Validation review required before packaging or save handoff.")
+                self.validation_status_label.setText(_t("Validation review required before packaging or save handoff."))
                 set_label_kind(self.validation_status_label, "warning" if not danger_count else "danger")
                 self.validation_counts_label.setText(
                     "  •  ".join(summary)
@@ -1705,7 +1705,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
                 for row in warnings:
                     self.validation_list.addItem(f"[{str(row.get('level') or '').upper()}] {row.get('text') or ''}")
             else:
-                self.validation_status_label.setText("Validation OK. No risky engine values detected.")
+                self.validation_status_label.setText(_t("Validation OK. No risky engine values detected."))
                 set_label_kind(self.validation_status_label, "ok")
                 self.validation_counts_label.setText(
                     f"Estimated HP {format_number(metadata.get('estimated_hp'))}  •  Max torque {format_number(state.get('maxTorqueNm'))} Nm  •  Redline {format_number(state.get('maxRPM'))} rpm"
@@ -1720,7 +1720,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         elif detail.get("type") == "tire":
             coverage = get_tire_field_coverage(detail)
             grip = self.editor_form.get_tire_grip_g()
-            self.validation_status_label.setText("Coverage review for the current tire donor layout.")
+            self.validation_status_label.setText(_t("Coverage review for the current tire donor layout."))
             set_label_kind(self.validation_status_label, "warning" if coverage and coverage.get("missing_known") else "notice")
             if grip is not None:
                 self.validation_counts_label.setText(f"Estimated grip {format_number(grip)} G")
@@ -1735,7 +1735,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
                 else:
                     self.validation_list.addItem("This donor already exposes the full known tire surface.")
             elif not self.validation_counts_label.text():
-                self.validation_counts_label.setText("Coverage metadata was not available for this donor.")
+                self.validation_counts_label.setText(_t("Coverage metadata was not available for this donor."))
         refresh_style(self.validation_status_label)
 
     def refresh_curve_panel(self) -> None:
@@ -1760,7 +1760,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
 
     def refresh_audio_panel(self) -> None:
         if not self.current_part or self.current_part.get("type") != "engine":
-            self.audio_summary_label.setText("Audio routing is available when an engine is selected.")
+            self.audio_summary_label.setText(_t("Audio routing is available when an engine is selected."))
             populate_key_value_tree(self.audio_tree, [], empty_message="Select an engine to inspect audio routing.")
             self.audio_override_checkbox.blockSignals(True)
             self.audio_override_checkbox.setChecked(False)
@@ -1778,7 +1778,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         self.audio_override_checkbox.blockSignals(True)
         if row:
             self.audio_override_checkbox.setChecked(bool(row.get("override_enabled")))
-            self.audio_summary_label.setText("Review the resolved template audio before saving or packaging this engine.")
+            self.audio_summary_label.setText(_t("Review the resolved template audio before saving or packaging this engine."))
             rows.extend(
                 [
                     ("Manifest status", str(row.get("status") or "—")),
@@ -1793,7 +1793,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
             )
         else:
             self.audio_override_checkbox.setChecked(False)
-            self.audio_summary_label.setText("No engine-audio manifest entry was found for this engine.")
+            self.audio_summary_label.setText(_t("No engine-audio manifest entry was found for this engine."))
         self.audio_override_checkbox.blockSignals(False)
         populate_key_value_tree(self.audio_tree, rows)
 

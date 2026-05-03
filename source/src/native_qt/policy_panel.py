@@ -11,6 +11,7 @@ from __future__ import annotations
 from PySide6 import QtCore, QtGui, QtWidgets
 
 import policy_editor as pol
+from i18n import _ as _t
 from parsers.uexp_policies_dt import (
     EFFECT_TYPE_LABELS, EFFECT_TYPE_UNITS, EFFECT_TYPES, PolicyRow,
 )
@@ -154,13 +155,13 @@ class PolicyEditorPanel(QtWidgets.QWidget):
         layout.setSpacing(16)
 
         # ── Header ──────────────────────────────────────────────────
-        layout.addWidget(_label("POLICY EDITOR", "eyebrow"))
-        layout.addWidget(_label("Town Policy Editor"))
+        layout.addWidget(_label(_t("POLICY EDITOR"), "eyebrow"))
+        layout.addWidget(_label(_t("Town Policy Editor")))
 
         desc = _label(
-            "Edit existing policy costs and effect values, or add new policies "
+            _t("Edit existing policy costs and effect values, or add new policies "
             "using the available effect types. Changes are staged into the mod "
-            "and included when you Pack Mod.",
+            "and included when you Pack Mod."),
             "muted",
         )
         layout.addWidget(desc)
@@ -170,10 +171,10 @@ class PolicyEditorPanel(QtWidgets.QWidget):
         layout.addWidget(self.status_label)
 
         # ── Existing Policies Table ─────────────────────────────────
-        layout.addWidget(_label("Existing Policies", "section"))
+        layout.addWidget(_label(_t("Existing Policies"), "section"))
         layout.addWidget(_label(
-            "Edit Cost or Effect Value directly in the table. "
-            "Display Name can also be changed.",
+            _t("Edit Cost or Effect Value directly in the table. "
+            "Display Name can also be changed."),
             "muted",
         ))
 
@@ -181,7 +182,7 @@ class PolicyEditorPanel(QtWidgets.QWidget):
         self.policy_table.setStyleSheet(_TABLE_STYLE)
         self.policy_table.setColumnCount(5)
         self.policy_table.setHorizontalHeaderLabels([
-            "Row Name", "Display Name", "Effect Type", "Cost", "Effect Value",
+            _t("Row Name"), _t("Display Name"), _t("Effect Type"), _t("Cost"), _t("Effect Value"),
         ])
         header = self.policy_table.horizontalHeader()
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
@@ -207,10 +208,10 @@ class PolicyEditorPanel(QtWidgets.QWidget):
         add_layout.setContentsMargins(16, 12, 16, 12)
         add_layout.setSpacing(10)
 
-        add_layout.addWidget(_label("Add New Policy", "section"))
+        add_layout.addWidget(_label(_t("Add New Policy"), "section"))
         add_layout.addWidget(_label(
-            "Create additional policies using an existing effect type. "
-            "For example, add a second Fuel Subsidy with a higher percentage.",
+            _t("Create additional policies using an existing effect type. "
+            "For example, add a second Fuel Subsidy with a higher percentage."),
             "muted",
         ))
 
@@ -225,20 +226,20 @@ class PolicyEditorPanel(QtWidgets.QWidget):
         for short, label in EFFECT_TYPE_LABELS.items():
             self.new_effect_combo.addItem(label, short)
         self.new_effect_combo.currentIndexChanged.connect(self._on_effect_type_changed)
-        form.addRow(_label("Effect Type:", "body"), self.new_effect_combo)
+        form.addRow(_label(_t("Effect Type:"), "body"), self.new_effect_combo)
 
         # Display name
         self.new_display_edit = QtWidgets.QLineEdit()
         self.new_display_edit.setStyleSheet(_INPUT_STYLE)
-        self.new_display_edit.setPlaceholderText("e.g. Fuel Subsidy 40%")
-        form.addRow(_label("Display Name:", "body"), self.new_display_edit)
+        self.new_display_edit.setPlaceholderText(_t("e.g. Fuel Subsidy 40%"))
+        form.addRow(_label(_t("Display Name:"), "body"), self.new_display_edit)
 
         # Cost
         self.new_cost_spin = QtWidgets.QSpinBox()
         self.new_cost_spin.setStyleSheet(_INPUT_STYLE)
         self.new_cost_spin.setRange(0, 999999)
         self.new_cost_spin.setValue(100)
-        form.addRow(_label("Cost:", "body"), self.new_cost_spin)
+        form.addRow(_label(_t("Cost:"), "body"), self.new_cost_spin)
 
         # Effect value
         self.new_value_spin = QtWidgets.QDoubleSpinBox()
@@ -246,7 +247,7 @@ class PolicyEditorPanel(QtWidgets.QWidget):
         self.new_value_spin.setRange(-999999.0, 999999.0)
         self.new_value_spin.setDecimals(4)
         self.new_value_spin.setValue(0.4)
-        form.addRow(_label("Effect Value:", "body"), self.new_value_spin)
+        form.addRow(_label(_t("Effect Value:"), "body"), self.new_value_spin)
 
         # Unit hint
         self.unit_hint_label = _label("", "muted")
@@ -256,7 +257,7 @@ class PolicyEditorPanel(QtWidgets.QWidget):
 
         add_btn_row = QtWidgets.QHBoxLayout()
         add_btn_row.addStretch(1)
-        self.add_policy_button = _action_button("Add Policy", "secondary")
+        self.add_policy_button = _action_button(_t("Add Policy"), "secondary")
         self.add_policy_button.clicked.connect(self._on_add_policy)
         add_btn_row.addWidget(self.add_policy_button)
         add_layout.addLayout(add_btn_row)
@@ -264,7 +265,7 @@ class PolicyEditorPanel(QtWidgets.QWidget):
         layout.addWidget(add_frame)
 
         # ── New Policies Queue ──────────────────────────────────────
-        self.new_table_label = _label("New Policies (pending)", "section")
+        self.new_table_label = _label(_t("New Policies (pending)"), "section")
         self.new_table_label.hide()
         layout.addWidget(self.new_table_label)
 
@@ -272,7 +273,7 @@ class PolicyEditorPanel(QtWidgets.QWidget):
         self.new_table.setStyleSheet(_TABLE_STYLE)
         self.new_table.setColumnCount(5)
         self.new_table.setHorizontalHeaderLabels([
-            "Display Name", "Effect Type", "Cost", "Effect Value", "",
+            _t("Display Name"), _t("Effect Type"), _t("Cost"), _t("Effect Value"), "",
         ])
         new_header = self.new_table.horizontalHeader()
         new_header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
@@ -289,8 +290,8 @@ class PolicyEditorPanel(QtWidgets.QWidget):
         # ── Action Buttons ──────────────────────────────────────────
         btn_row = QtWidgets.QHBoxLayout()
         btn_row.setSpacing(12)
-        self.apply_button = _action_button("Apply Policy Changes", "primary")
-        self.reset_button = _action_button("Reset to Vanilla", "danger")
+        self.apply_button = _action_button(_t("Apply Policy Changes"), "primary")
+        self.reset_button = _action_button(_t("Reset to Vanilla"), "danger")
         btn_row.addStretch(1)
         btn_row.addWidget(self.reset_button)
         btn_row.addWidget(self.apply_button)
@@ -314,7 +315,7 @@ class PolicyEditorPanel(QtWidgets.QWidget):
         """Load vanilla policies and any saved modifications."""
         data = pol.load_vanilla_policies()
         if data is None:
-            self.status_label.setText("⚠ Could not load vanilla policy data.")
+            self.status_label.setText(_t("⚠ Could not load vanilla policy data."))
             self.status_label.setStyleSheet(f"color: {_WARNING}; font-size: 12px;")
             return
 
@@ -327,10 +328,10 @@ class PolicyEditorPanel(QtWidgets.QWidget):
             self._restore_saved(saved)
 
         if pol.is_policy_mod_staged():
-            self.status_label.setText("Policy mod is staged for packing.")
+            self.status_label.setText(_t("Policy mod is staged for packing."))
             self.status_label.setStyleSheet(f"color: {_SUCCESS}; font-size: 12px;")
         else:
-            self.status_label.setText("No policy modifications applied yet.")
+            self.status_label.setText(_t("No policy modifications applied yet."))
             self.status_label.setStyleSheet(f"color: {_MUTED}; font-size: 12px;")
 
     def _populate_table(self) -> None:
@@ -394,7 +395,7 @@ class PolicyEditorPanel(QtWidgets.QWidget):
     def _on_add_policy(self) -> None:
         display = self.new_display_edit.text().strip()
         if not display:
-            self.status_label.setText("⚠ Display name is required.")
+            self.status_label.setText(_t("⚠ Display name is required."))
             self.status_label.setStyleSheet(f"color: {_WARNING}; font-size: 12px;")
             return
 
@@ -414,14 +415,14 @@ class PolicyEditorPanel(QtWidgets.QWidget):
         self.new_display_edit.clear()
         self.new_cost_spin.setValue(100)
 
-        self.status_label.setText(f"Added new policy: {display}")
+        self.status_label.setText(_t("Added new policy: {display}").format(display=display))
         self.status_label.setStyleSheet(f"color: {_ACCENT}; font-size: 12px;")
 
     def _on_remove_new(self, idx: int) -> None:
         if 0 <= idx < len(self._new_policies):
             removed = self._new_policies.pop(idx)
             self._refresh_new_table()
-            self.status_label.setText(f"Removed: {removed.get('display_name', '?')}")
+            self.status_label.setText(_t("Removed: {name}").format(name=removed.get('display_name', '?')))
             self.status_label.setStyleSheet(f"color: {_MUTED}; font-size: 12px;")
 
     def _refresh_new_table(self) -> None:
@@ -461,31 +462,31 @@ class PolicyEditorPanel(QtWidgets.QWidget):
         has_mods = bool(settings.get('modifications'))
         has_new = bool(settings.get('new_policies'))
         if not has_mods and not has_new:
-            self.status_label.setText("No changes to apply.")
+            self.status_label.setText(_t("No changes to apply."))
             self.status_label.setStyleSheet(f"color: {_MUTED}; font-size: 12px;")
             return
 
         result = pol.apply_policy_changes(settings)
 
         if result.get('success'):
-            msg = (
-                f"Policy changes applied: {result.get('modified', 0)} modified, "
-                f"{result.get('added', 0)} added "
-                f"({result.get('total_rows', 0)} total policies)."
+            msg = _t("Policy changes applied: {modified} modified, {added} added ({total} total policies).").format(
+                modified=result.get('modified', 0),
+                added=result.get('added', 0),
+                total=result.get('total_rows', 0)
             )
             self.status_label.setText(msg)
             self.status_label.setStyleSheet(f"color: {_SUCCESS}; font-size: 12px;")
             self.policy_applied.emit(result)
         else:
-            self.status_label.setText(f"⚠ {result.get('error', 'Unknown error')}")
+            self.status_label.setText(_t("⚠ {error}").format(error=result.get('error', _t('Unknown error'))))
             self.status_label.setStyleSheet(f"color: {_WARNING}; font-size: 12px;")
 
     def _on_reset(self) -> None:
         """Reset everything to vanilla."""
         reply = QtWidgets.QMessageBox.question(
             self,
-            "Reset Policies",
-            "Remove all policy modifications and revert to vanilla values?",
+            _t("Reset Policies"),
+            _t("Remove all policy modifications and revert to vanilla values?"),
             QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
         )
         if reply != QtWidgets.QMessageBox.StandardButton.Yes:
@@ -496,7 +497,7 @@ class PolicyEditorPanel(QtWidgets.QWidget):
         self._refresh_new_table()
         self._populate_table()  # reset table to vanilla values
 
-        self.status_label.setText("Policies reset to vanilla.")
+        self.status_label.setText(_t("Policies reset to vanilla."))
         self.status_label.setStyleSheet(f"color: {_MUTED}; font-size: 12px;")
 
     # ------------------------------------------------------------------

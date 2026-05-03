@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from PySide6 import QtCore, QtGui, QtWidgets
 
 import economy_editor as eco
+from i18n import _ as _t
 
 # ---------------------------------------------------------------------------
 # Map image path – resolved relative to this file's directory
@@ -571,11 +572,11 @@ class JejuMapWidget(QtWidgets.QWidget):
         # so they render identically regardless of system-font coverage
         # (U+2212 MINUS and U+2302 HOUSE aren't in every Windows font).
         self._zoom_in_btn = self._make_overlay_button(
-            'zoom_in', "Zoom in (mouse wheel up)")
+            'zoom_in', _t("Zoom in (mouse wheel up)"))
         self._zoom_out_btn = self._make_overlay_button(
-            'zoom_out', "Zoom out (mouse wheel down)")
+            'zoom_out', _t("Zoom out (mouse wheel down)"))
         self._zoom_reset_btn = self._make_overlay_button(
-            'fit', "Fit to view (keyboard: 0)")
+            'fit', _t("Fit to view (keyboard: 0)"))
         self._zoom_in_btn.clicked.connect(lambda: self._zoom_around_center(self.ZOOM_STEP))
         self._zoom_out_btn.clicked.connect(lambda: self._zoom_around_center(1.0 / self.ZOOM_STEP))
         self._zoom_reset_btn.clicked.connect(self.reset_view)
@@ -881,10 +882,10 @@ class JejuMapWidget(QtWidgets.QWidget):
         p.setFont(font)
 
         items = [
-            (_STOP_COLOR, "Bus Stop"),
-            (_STOP_SELECTED, "On Route"),
-            (_ROUTE_COLOR, "Route Path"),
-            ("#4a6060", "No GUID (cannot export)"),
+            (_STOP_COLOR, _t("Bus Stop")),
+            (_STOP_SELECTED, _t("On Route")),
+            (_ROUTE_COLOR, _t("Route Path")),
+            ("#4a6060", _t("No GUID (cannot export)")),
         ]
         for color, label in items:
             p.setPen(QtCore.Qt.PenStyle.NoPen)
@@ -896,8 +897,7 @@ class JejuMapWidget(QtWidgets.QWidget):
 
         # Zoom readout + navigation hint.
         p.setPen(QtGui.QColor(_MUTED))
-        p.drawText(x, y + 11, f"Zoom: {self._user_zoom:.1f}\u00d7  \u2014  "
-                              f"wheel zooms, middle-click or Shift+drag pans, 0 resets")
+        p.drawText(x, y + 11, _t("Zoom: {zoom:.1f}\u00d7  \u2014  wheel zooms, middle-click or Shift+drag pans, 0 resets").format(zoom=self._user_zoom))
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
         # If a pan-drag is in progress, translate view_center by the
@@ -1006,16 +1006,16 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
         left_layout.setContentsMargins(16, 16, 16, 16)
         left_layout.setSpacing(10)
 
-        left_layout.addWidget(_label("BUS ROUTE CONFIGURATOR", "eyebrow"))
-        left_layout.addWidget(_label("Route Planner", "title"))
+        left_layout.addWidget(_label(_t("BUS ROUTE CONFIGURATOR"), "eyebrow"))
+        left_layout.addWidget(_label(_t("Route Planner"), "title"))
         left_layout.addWidget(_label(
-            "Select a predefined route or build a custom route by clicking stops on the map. "
-            "Export routes as JSON for use with the game's route import system.",
+            _t("Select a predefined route or build a custom route by clicking stops on the map. "
+            "Export routes as JSON for use with the game's route import system."),
             "muted",
         ))
 
         # Route selector
-        left_layout.addWidget(_label("PREDEFINED ROUTES", "eyebrow"))
+        left_layout.addWidget(_label(_t("PREDEFINED ROUTES"), "eyebrow"))
         self.route_combo = QtWidgets.QComboBox()
         self.route_combo.setStyleSheet(f"""
             QComboBox {{
@@ -1032,15 +1032,15 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
                 border: 1px solid {_BORDER};
             }}
         """)
-        self.route_combo.addItem("\u2014 Custom Route \u2014")
+        self.route_combo.addItem(_t("\u2014 Custom Route \u2014"))
         self.route_combo.currentIndexChanged.connect(self._on_route_selected)
         left_layout.addWidget(self.route_combo)
 
         # Route name input
-        left_layout.addWidget(_label("ROUTE NAME", "eyebrow"))
+        left_layout.addWidget(_label(_t("ROUTE NAME"), "eyebrow"))
         self.route_name_input = QtWidgets.QLineEdit()
-        self.route_name_input.setPlaceholderText("Enter route name (e.g. Jeju)")
-        self.route_name_input.setText("Custom Route")
+        self.route_name_input.setPlaceholderText(_t("Enter route name (e.g. Jeju)"))
+        self.route_name_input.setText(_t("Custom Route"))
         self.route_name_input.setStyleSheet(f"""
             QLineEdit {{
                 background: {_CARD};
@@ -1057,7 +1057,7 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
         left_layout.addWidget(self.route_name_input)
 
         # Passenger count
-        left_layout.addWidget(_label("AVERAGE PASSENGERS", "eyebrow"))
+        left_layout.addWidget(_label(_t("AVERAGE PASSENGERS"), "eyebrow"))
         self.passenger_spin = QtWidgets.QSpinBox()
         self.passenger_spin.setRange(1, 50)
         self.passenger_spin.setValue(5)
@@ -1075,7 +1075,7 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
         left_layout.addWidget(self.passenger_spin)
 
         # Current route stops list
-        left_layout.addWidget(_label("ROUTE STOPS", "eyebrow"))
+        left_layout.addWidget(_label(_t("ROUTE STOPS"), "eyebrow"))
         self.stop_list = QtWidgets.QListWidget()
         self.stop_list.setStyleSheet(f"""
             QListWidget {{
@@ -1099,9 +1099,9 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
         # Route actions (clear / remove)
         btn_row = QtWidgets.QHBoxLayout()
         btn_row.setSpacing(8)
-        self.clear_btn = _action_button("Clear Route", "secondary")
+        self.clear_btn = _action_button(_t("Clear Route"), "secondary")
         self.clear_btn.clicked.connect(self._on_clear_route)
-        self.remove_btn = _action_button("Remove Last", "secondary")
+        self.remove_btn = _action_button(_t("Remove Last"), "secondary")
         self.remove_btn.clicked.connect(self._on_remove_last)
         btn_row.addWidget(self.clear_btn)
         btn_row.addWidget(self.remove_btn)
@@ -1119,11 +1119,11 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
         payout_layout = QtWidgets.QVBoxLayout(payout_card)
         payout_layout.setContentsMargins(12, 12, 12, 12)
         payout_layout.setSpacing(6)
-        payout_layout.addWidget(_label("ESTIMATED PAYOUT", "eyebrow"))
-        self.payout_label = _label("$0", "accent")
+        payout_layout.addWidget(_label(_t("ESTIMATED PAYOUT"), "eyebrow"))
+        self.payout_label = _label(_t("$0"), "accent")
         self.payout_label.setStyleSheet(f"color: {_ACCENT}; font-size: 24px; font-weight: 700;")
         payout_layout.addWidget(self.payout_label)
-        self.payout_details = _label("Select stops to see estimate", "muted")
+        self.payout_details = _label(_t("Select stops to see estimate"), "muted")
         payout_layout.addWidget(self.payout_details)
         left_layout.addWidget(payout_card)
 
@@ -1139,18 +1139,18 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
         export_layout = QtWidgets.QVBoxLayout(export_card)
         export_layout.setContentsMargins(12, 12, 12, 12)
         export_layout.setSpacing(8)
-        export_layout.addWidget(_label("ROUTE EXPORT", "eyebrow"))
+        export_layout.addWidget(_label(_t("ROUTE EXPORT"), "eyebrow"))
         export_layout.addWidget(_label(
-            "Export route as JSON for the game's route import. "
-            "Stops without a known GUID will be marked.",
+            _t("Export route as JSON for the game's route import. "
+            "Stops without a known GUID will be marked."),
             "muted",
         ))
 
         export_btn_row = QtWidgets.QHBoxLayout()
         export_btn_row.setSpacing(8)
-        self.copy_btn = _action_button("Copy to Clipboard", "primary")
+        self.copy_btn = _action_button(_t("Copy to Clipboard"), "primary")
         self.copy_btn.clicked.connect(self._on_copy_to_clipboard)
-        self.save_btn = _action_button("Save as .txt", "success")
+        self.save_btn = _action_button(_t("Save as .txt"), "success")
         self.save_btn.clicked.connect(self._on_save_as_txt)
         export_btn_row.addWidget(self.copy_btn)
         export_btn_row.addWidget(self.save_btn)
@@ -1182,11 +1182,11 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
         map_layout.setSpacing(4)
 
         map_header = QtWidgets.QHBoxLayout()
-        map_header.addWidget(_label("JEJU ISLAND \u2014 MOTOR TOWN MAP", "eyebrow"))
+        map_header.addWidget(_label(_t("JEJU ISLAND \u2014 MOTOR TOWN MAP"), "eyebrow"))
         map_header.addStretch(1)
         guid_count = sum(1 for s in BUS_STOPS if s.get("guid"))
         self.stop_count_label = _label(
-            f"{len(BUS_STOPS)} bus stops ({guid_count} with GUIDs)", "muted"
+            _t("{count} bus stops ({guid_count} with GUIDs)").format(count=len(BUS_STOPS), guid_count=guid_count), "muted"
         )
         map_header.addWidget(self.stop_count_label)
         map_layout.addLayout(map_header)
@@ -1206,7 +1206,7 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
             # Custom route mode
             self._custom_route = []
             self._route_guid = generate_route_guid()
-            self.route_name_input.setText("Custom Route")
+            self.route_name_input.setText(_t("Custom Route"))
             self.map_widget.clear_route()
             self.stop_list.clear()
             self._update_estimate()
@@ -1277,18 +1277,20 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
         )
 
         if est["stops"] < 2:
-            self.payout_label.setText("$0")
-            self.payout_details.setText("Add at least 2 stops to see estimate")
+            self.payout_label.setText(_t("$0"))
+            self.payout_details.setText(_t("Add at least 2 stops to see estimate"))
             return
 
         payment = est["estimated_payment"]
         self.payout_label.setText(f"${payment:,.0f}")
         self.payout_details.setText(
-            f"{est['stops']} stops | "
-            f"~{est['total_distance_meters']:,.0f}m total | "
-            f"${est['per_stop_payment']:,.0f}/stop | "
-            f"{est['avg_passengers']} passengers | "
-            f"Bus \u00d7{bus_mult:.0f}"
+            _t("{stops} stops | ~{distance}m total | ${per_stop}/stop | {passengers} passengers | Bus \u00d7{mult:.0f}").format(
+                stops=est['stops'],
+                distance=int(est['total_distance_meters']),
+                per_stop=int(est['per_stop_payment']),
+                passengers=est['avg_passengers'],
+                mult=bus_mult
+            )
         )
 
     # ------------------------------------------------------------------
@@ -1297,11 +1299,11 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
     def _get_route_json(self) -> Optional[str]:
         """Generate route JSON, or None if route is empty."""
         if len(self._custom_route) < 2:
-            self.export_status.setText("Need at least 2 stops to export.")
+            self.export_status.setText(_t("Need at least 2 stops to export."))
             self.export_status.setStyleSheet(f"color: #e74c3c; font-size: 12px;")
             return None
 
-        route_name = self.route_name_input.text().strip() or "Custom Route"
+        route_name = self.route_name_input.text().strip() or _t("Custom Route")
 
         # Warn about stops without GUIDs
         missing_guid = []
@@ -1315,7 +1317,7 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
         if missing_guid:
             names = ", ".join(missing_guid)
             self.export_status.setText(
-                f"Warning: {len(missing_guid)} stop(s) missing GUIDs: {names}"
+                _t("Warning: {count} stop(s) missing GUIDs: {names}").format(count=len(missing_guid), names=names)
             )
             self.export_status.setStyleSheet(f"color: {_ROUTE_COLOR}; font-size: 11px;")
         return json_str
@@ -1331,7 +1333,7 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
 
         missing = any(not _STOP_MAP.get(sid, {}).get("guid") for sid in self._custom_route)
         if not missing:
-            self.export_status.setText("Route JSON copied to clipboard!")
+            self.export_status.setText(_t("Route JSON copied to clipboard!"))
             self.export_status.setStyleSheet(f"color: {_STOP_COLOR}; font-size: 12px; font-weight: 600;")
 
     def _on_save_as_txt(self) -> None:
@@ -1340,14 +1342,14 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
         if json_str is None:
             return
 
-        route_name = self.route_name_input.text().strip() or "Custom Route"
+        route_name = self.route_name_input.text().strip() or _t("Custom Route")
         default_name = route_name.replace(" ", "_") + "_route.txt"
 
         file_path, _ = QtWidgets.QFileDialog.getSaveFileName(
             self,
-            "Save Route as TXT",
+            _t("Save Route as TXT"),
             default_name,
-            "Text Files (*.txt);;JSON Files (*.json);;All Files (*)",
+            _t("Text Files (*.txt);;JSON Files (*.json);;All Files (*)"),
         )
 
         if not file_path:
@@ -1357,8 +1359,8 @@ class BusRouteConfigPanel(QtWidgets.QWidget):
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(json_str)
 
-            self.export_status.setText(f"Saved to: {file_path}")
+            self.export_status.setText(_t("Saved to: {path}").format(path=file_path))
             self.export_status.setStyleSheet(f"color: {_STOP_COLOR}; font-size: 12px; font-weight: 600;")
         except OSError as e:
-            self.export_status.setText(f"Error saving: {e}")
+            self.export_status.setText(_t("Error saving: {error}").format(error=str(e)))
             self.export_status.setStyleSheet(f"color: #e74c3c; font-size: 12px;")

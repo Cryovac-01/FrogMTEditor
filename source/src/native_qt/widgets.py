@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .theme import *
+from i18n import _ as _t
 
 class TaskSignals(QtCore.QObject):
     finished = QtCore.Signal(object, object)
@@ -28,7 +29,7 @@ class CurveChartCard(QtWidgets.QWidget):
     def __init__(self, banner_name: str = "curve_banner.png", parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
         self._pending_points: Optional[List[Dict[str, Any]]] = None
-        self._pending_note = "Open the Curve tab to render torque data."
+        self._pending_note = _t("Open the Curve tab to render torque data.")
         self._chart_initialized = False
         self.chart_view: Optional[QtCharts.QChartView] = None
 
@@ -43,11 +44,11 @@ class CurveChartCard(QtWidgets.QWidget):
         intro_layout.setSpacing(SPACING.lg)
         intro_copy = QtWidgets.QVBoxLayout()
         intro_copy.setSpacing(4)
-        intro_eyebrow = QtWidgets.QLabel("TORQUE CURVE")
+        intro_eyebrow = QtWidgets.QLabel(_t("TORQUE CURVE"))
         set_label_kind(intro_eyebrow, "eyebrow")
-        intro_title = QtWidgets.QLabel("Curve Preview")
+        intro_title = QtWidgets.QLabel(_t("Curve Preview"))
         set_label_kind(intro_title, "section")
-        self.note_label = QtWidgets.QLabel("Open the Curve tab to render torque data.")
+        self.note_label = QtWidgets.QLabel(_t("Open the Curve tab to render torque data."))
         self.note_label.setWordWrap(True)
         set_label_kind(self.note_label, "muted")
         intro_copy.addWidget(intro_eyebrow)
@@ -73,10 +74,10 @@ class CurveChartCard(QtWidgets.QWidget):
         self.placeholder_icon = QtWidgets.QLabel()
         self.placeholder_icon.setPixmap(load_tinted_icon("curve.svg", "#73c686", size=30).pixmap(30, 30))
         self.placeholder_icon.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.placeholder_title = QtWidgets.QLabel("No curve data available")
+        self.placeholder_title = QtWidgets.QLabel(_t("No curve data available"))
         self.placeholder_title.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         set_label_kind(self.placeholder_title, "section")
-        self.placeholder_label = QtWidgets.QLabel("Curve visualization initializes on demand to keep the shell responsive.")
+        self.placeholder_label = QtWidgets.QLabel(_t("Curve visualization initializes on demand to keep the shell responsive."))
         self.placeholder_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.placeholder_label.setWordWrap(True)
         set_label_kind(self.placeholder_label, "muted")
@@ -86,7 +87,7 @@ class CurveChartCard(QtWidgets.QWidget):
         host_layout.addWidget(self.placeholder_label)
         host_layout.addStretch(1)
         layout.addWidget(self.chart_host, 1)
-        self.show_empty("Open the Curve tab to render torque data.")
+        self.show_empty(_t("Open the Curve tab to render torque data."))
 
     def _ensure_chart_view(self) -> QtCharts.QChartView:
         if self.chart_view is not None:
@@ -120,10 +121,10 @@ class CurveChartCard(QtWidgets.QWidget):
         self._pending_note = note
         self.note_label.setText(note)
         if self.chart_view is None:
-            self.placeholder_title.setText("No curve data available")
-            self.placeholder_label.setText(note or "Open the Curve tab to render torque data.")
+            self.placeholder_title.setText(_t("No curve data available"))
+            self.placeholder_label.setText(note or _t("Open the Curve tab to render torque data."))
             return
-        chart = self._build_base_chart("No curve data available")
+        chart = self._build_base_chart(_t("No curve data available"))
         chart.setTitleBrush(QtGui.QBrush(MUTED_COLOR))
         self.chart_view.setChart(chart)
 
@@ -138,7 +139,7 @@ class CurveChartCard(QtWidgets.QWidget):
         elif self.chart_view is not None and self._chart_initialized:
             self.activate()
         else:
-            self.placeholder_label.setText("Open the Curve tab to render this torque graph.")
+            self.placeholder_label.setText(_t("Open the Curve tab to render this torque graph."))
 
     def activate(self) -> None:
         points = self._pending_points or []
@@ -161,7 +162,7 @@ class CurveChartCard(QtWidgets.QWidget):
         if max_y <= min_y:
             max_y = min_y + 1.0
 
-        chart = self._build_base_chart("Torque Curve")
+        chart = self._build_base_chart(_t("Torque Curve"))
         series = QtCharts.QLineSeries()
         pen = QtGui.QPen(LINE_COLOR)
         pen.setWidth(3)
@@ -413,10 +414,10 @@ class TemplateListDelegate(QtWidgets.QStyledItemDelegate):
         painter.restore()
 
 
-def build_key_value_tree(header_left: str = "Field", header_right: str = "Value") -> QtWidgets.QTreeWidget:
+def build_key_value_tree(header_left: str = "", header_right: str = "") -> QtWidgets.QTreeWidget:
     tree = QtWidgets.QTreeWidget()
     tree.setColumnCount(2)
-    tree.setHeaderLabels([header_left, header_right])
+    tree.setHeaderLabels([header_left or _t("Field"), header_right or _t("Value")])
     tree.setRootIsDecorated(False)
     tree.setAlternatingRowColors(False)
     tree.setIndentation(0)
@@ -441,7 +442,7 @@ def populate_key_value_tree(
         item = QtWidgets.QTreeWidgetItem([str(key or "—"), str(value or "—")])
         tree.addTopLevelItem(item)
     if not rendered:
-        tree.addTopLevelItem(QtWidgets.QTreeWidgetItem(["Status", empty_message]))
+        tree.addTopLevelItem(QtWidgets.QTreeWidgetItem([_t("Status"), empty_message]))
 
 
 class QuickActionDialog(QtWidgets.QDialog):
@@ -453,7 +454,7 @@ class QuickActionDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self._actions = [dict(row) for row in actions]
         self._visible_actions: List[Dict[str, Any]] = []
-        self.setWindowTitle("Quick Actions")
+        self.setWindowTitle(_t("Quick Actions"))
         self.setModal(True)
         self.resize(620, 420)
 
@@ -461,13 +462,13 @@ class QuickActionDialog(QtWidgets.QDialog):
         root.setContentsMargins(SPACING.lg, SPACING.lg, SPACING.lg, SPACING.lg)
         root.setSpacing(SPACING.md)
 
-        intro = QtWidgets.QLabel("Search commands, navigation actions, and pack workflows.")
+        intro = QtWidgets.QLabel(_t("Search commands, navigation actions, and pack workflows."))
         set_label_kind(intro, "muted")
         root.addWidget(intro)
 
         self.search_edit = QtWidgets.QLineEdit()
         configure_field_control(self.search_edit, "search")
-        self.search_edit.setPlaceholderText("Type a command or shortcut")
+        self.search_edit.setPlaceholderText(_t("Type a command or shortcut"))
         self.search_edit.addAction(load_icon("search.svg"), QtWidgets.QLineEdit.ActionPosition.LeadingPosition)
         root.addWidget(self.search_edit)
 
@@ -477,8 +478,8 @@ class QuickActionDialog(QtWidgets.QDialog):
 
         button_row = QtWidgets.QHBoxLayout()
         button_row.addStretch(1)
-        self.cancel_button = make_action_button("Close", role="secondary", chrome="headerAction")
-        self.run_button = make_action_button("Run", role="primary", chrome="headerAction")
+        self.cancel_button = make_action_button(_t("Close"), role="secondary", chrome="headerAction")
+        self.run_button = make_action_button(_t("Run"), role="primary", chrome="headerAction")
         button_row.addWidget(self.cancel_button)
         button_row.addWidget(self.run_button)
         root.addLayout(button_row)
@@ -504,7 +505,7 @@ class QuickActionDialog(QtWidgets.QDialog):
             if text and text not in haystack:
                 continue
             self._visible_actions.append(action)
-            label = str(action.get("title") or "Action")
+            label = str(action.get("title") or _t("Action"))
             shortcut = str(action.get("shortcut") or "").strip()
             description = str(action.get("description") or "").strip()
             item = QtWidgets.QListWidgetItem(label)

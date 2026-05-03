@@ -4,6 +4,7 @@ from __future__ import annotations
 from .theme import *
 from .widgets import TemplateListDelegate
 from .forms import PartEditorForm
+from i18n import _ as _t
 
 
 def _confirm_validation(parent: QtWidgets.QWidget,
@@ -25,9 +26,9 @@ def _confirm_validation(parent: QtWidgets.QWidget,
         QtWidgets.QMessageBox.critical(
             parent,
             APP_NAME,
-            "Some inputs are out of the safe range and would crash or "
+            _t("Some inputs are out of the safe range and would crash or "
             "freeze the game in-game. Fix these before saving:\n\n"
-            f"{body}",
+            f"{body}"),
         )
         return False
 
@@ -36,9 +37,9 @@ def _confirm_validation(parent: QtWidgets.QWidget,
         answer = QtWidgets.QMessageBox.question(
             parent,
             APP_NAME,
-            "Some inputs are outside their typical range. They are "
+            _t("Some inputs are outside their typical range. They are "
             "allowed but may produce unexpected behaviour. Save anyway?\n\n"
-            f"{body}",
+            f"{body}"),
         )
         if answer != QtWidgets.QMessageBox.StandardButton.Yes:
             return False
@@ -70,7 +71,7 @@ class CreatorCatalogSidebar(QtWidgets.QFrame):
         layout.setContentsMargins(SPACING.lg, SPACING.lg, SPACING.lg, SPACING.lg)
         layout.setSpacing(SPACING.md)
 
-        self.title_label = QtWidgets.QLabel("Create")
+        self.title_label = QtWidgets.QLabel(_t("Create"))
         set_label_kind(self.title_label, "section")
         layout.addWidget(self.title_label)
 
@@ -82,6 +83,7 @@ class CreatorCatalogSidebar(QtWidgets.QFrame):
         self.search_edit = QtWidgets.QLineEdit()
         configure_field_control(self.search_edit, "search")
         self.search_edit.addAction(load_icon("search.svg"), QtWidgets.QLineEdit.ActionPosition.LeadingPosition)
+        self.search_edit.setPlaceholderText(_t("Search"))
         layout.addWidget(self.search_edit)
 
         self.group_combo = QtWidgets.QComboBox()
@@ -145,8 +147,8 @@ class CreatorCatalogSidebar(QtWidgets.QFrame):
         self.fixed_detail = None
         self._refreshing_catalog = False
         self._selected_identifier = ""
-        self.title_label.setText("Create")
-        self.subtitle_label.setText("Choose a flow from the workspace to start.")
+        self.title_label.setText(_t("Create"))
+        self.subtitle_label.setText(_t("Choose a flow from the workspace to start."))
         self.search_edit.hide()
         self.group_combo.hide()
         self.sort_combo.hide()
@@ -163,9 +165,9 @@ class CreatorCatalogSidebar(QtWidgets.QFrame):
         self.fixed_detail = None
         self.template_rows = list(catalog.get("items") or [])
         self._selected_identifier = ""
-        self.title_label.setText("Template Catalog")
-        self.subtitle_label.setText("Choose a donor engine template for the new part.")
-        self.search_edit.setPlaceholderText("Search engines")
+        self.title_label.setText(_t("Template Catalog"))
+        self.subtitle_label.setText(_t("Choose a donor engine template for the new part."))
+        self.search_edit.setPlaceholderText(_t("Search engines"))
         self.search_edit.show()
         self.group_combo.show()
         self.sort_combo.show()
@@ -178,12 +180,12 @@ class CreatorCatalogSidebar(QtWidgets.QFrame):
         self.search_edit.blockSignals(False)
         self.group_combo.blockSignals(True)
         self.group_combo.clear()
-        self.group_combo.addItem("All Variants")
+        self.group_combo.addItem(_t("All Variants"))
         for row in catalog.get("groups", []):
             self.group_combo.addItem(str(row.get("label") or row.get("key") or ""))
         self.group_combo.blockSignals(False)
         self.sort_combo.blockSignals(True)
-        self.sort_combo.setCurrentText("Horsepower")
+        self.sort_combo.setCurrentText(_t("Horsepower"))
         self.sort_combo.blockSignals(False)
         self.list_view.setItemDelegate(TemplateListDelegate("engine", self.list_view))
         self.refresh_catalog()
@@ -193,9 +195,9 @@ class CreatorCatalogSidebar(QtWidgets.QFrame):
         self.fixed_detail = None
         self.template_rows = list(catalog.get("items") or [])
         self._selected_identifier = ""
-        self.title_label.setText("Donor Tire Catalog")
-        self.subtitle_label.setText("Choose a donor tire family and template.")
-        self.search_edit.setPlaceholderText("Search tires")
+        self.title_label.setText(_t("Donor Tire Catalog"))
+        self.subtitle_label.setText(_t("Choose a donor tire family and template."))
+        self.search_edit.setPlaceholderText(_t("Search tires"))
         self.search_edit.show()
         self.group_combo.show()
         self.sort_combo.hide()
@@ -208,7 +210,7 @@ class CreatorCatalogSidebar(QtWidgets.QFrame):
         self.search_edit.blockSignals(False)
         self.group_combo.blockSignals(True)
         self.group_combo.clear()
-        self.group_combo.addItem("All Families")
+        self.group_combo.addItem(_t("All Families"))
         for row in catalog.get("groups", []):
             self.group_combo.addItem(str(row.get("label") or row.get("key") or ""))
         self.group_combo.blockSignals(False)
@@ -222,8 +224,8 @@ class CreatorCatalogSidebar(QtWidgets.QFrame):
         self.filtered_rows = []
         self._selected_identifier = ""
         self.list_model.clear()
-        self.title_label.setText("Fork Source")
-        self.subtitle_label.setText("Create a new engine from the current generated part.")
+        self.title_label.setText(_t("Fork Source"))
+        self.subtitle_label.setText(_t("Create a new engine from the current generated part."))
         self.search_edit.hide()
         self.group_combo.hide()
         self.sort_combo.hide()
@@ -237,7 +239,7 @@ class CreatorCatalogSidebar(QtWidgets.QFrame):
             stats.append(f"{format_compact_metric(metadata.get('max_torque_nm'))} Nm")
         if metadata.get("max_rpm") not in (None, ""):
             stats.append(f"{format_compact_metric(metadata.get('max_rpm'))} rpm")
-        self.summary_kicker.setText("CURRENT GENERATED ENGINE")
+        self.summary_kicker.setText(_t("CURRENT GENERATED ENGINE"))
         self.summary_name.setText(str(shop.get("display_name") or self.fixed_detail.get("name") or ""))
         meta_bits = [
             str(shop.get("description") or "").strip(),
@@ -245,7 +247,7 @@ class CreatorCatalogSidebar(QtWidgets.QFrame):
         ]
         self.summary_meta.setText("  •  ".join(bit for bit in meta_bits if bit))
         self.summary_stats.setText("  •  ".join(stats))
-        self.summary_note.setText("Forking creates a new generated engine from the current part so you can branch tuning without overwriting the original.")
+        self.summary_note.setText(_t("Forking creates a new generated engine from the current part so you can branch tuning without overwriting the original."))
         self.summary_card.setMinimumHeight(232)
         self.summary_card.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
         self.summary_card.show()
@@ -301,7 +303,7 @@ class CreatorCatalogSidebar(QtWidgets.QFrame):
         rows = list(self.template_rows)
         current_identifier = self._selected_identifier or self.current_identifier()
         if self.mode == "engine":
-            if group_label and group_label != "All Variants":
+            if group_label and group_label != _t("All Variants"):
                 rows = [row for row in rows if row.get("group_label") == group_label]
             if query:
                 rows = [
@@ -310,11 +312,11 @@ class CreatorCatalogSidebar(QtWidgets.QFrame):
                     or query in str(row.get("title") or "").lower()
                     or query in str(row.get("description") or "").lower()
                 ]
-            rows.sort(key=self.ENGINE_SORT_OPTIONS.get(self.sort_combo.currentText(), self.ENGINE_SORT_OPTIONS["Horsepower"]))
-            if group_label == "All Variants":
+            rows.sort(key=self.ENGINE_SORT_OPTIONS.get(self.sort_combo.currentText(), self.ENGINE_SORT_OPTIONS[_t("Horsepower")]))
+            if group_label == _t("All Variants"):
                 rows = self._dedupe_all_engine_variant_rows(rows)
         else:
-            if group_label and group_label != "All Families":
+            if group_label and group_label != _t("All Families"):
                 rows = [row for row in rows if row.get("group_label") == group_label]
             if query:
                 rows = [
@@ -399,9 +401,9 @@ class CreatorWorkspace(QtWidgets.QWidget):
         header = QtWidgets.QVBoxLayout(self.header_frame)
         header.setContentsMargins(SPACING.lg, SPACING.sm, SPACING.lg, SPACING.sm)
         header.setSpacing(SPACING.xxs)
-        self.eyebrow_label = QtWidgets.QLabel("CREATE")
+        self.eyebrow_label = QtWidgets.QLabel(_t("CREATE"))
         set_label_kind(self.eyebrow_label, "eyebrow")
-        self.title_label = QtWidgets.QLabel("Create")
+        self.title_label = QtWidgets.QLabel(_t("Create"))
         set_label_kind(self.title_label, "dialogTitle")
         header.addWidget(self.eyebrow_label)
         header.addWidget(self.title_label)
@@ -438,8 +440,8 @@ class CreatorWorkspace(QtWidgets.QWidget):
         self.body_shell_layout.setSpacing(SPACING.md)
         self.scroll_layout.addWidget(self.body_shell)
 
-        self.name_group, name_layout = build_creator_card("New Asset")
-        name_label = QtWidgets.QLabel("Internal Name")
+        self.name_group, name_layout = build_creator_card(_t("New Asset"))
+        name_label = QtWidgets.QLabel(_t("Internal Name"))
         set_label_kind(name_label, "fieldLabel")
         self.name_edit = QtWidgets.QLineEdit()
         configure_field_control(self.name_edit, "editor")
@@ -457,10 +459,10 @@ class CreatorWorkspace(QtWidgets.QWidget):
         status_layout = QtWidgets.QHBoxLayout(self.status_strip)
         status_layout.setContentsMargins(SPACING.md, SPACING.xs, SPACING.md, SPACING.xs)
         status_layout.setSpacing(SPACING.sm)
-        self.status_label = QtWidgets.QLabel("Choose a template or donor to begin.")
+        self.status_label = QtWidgets.QLabel(_t("Choose a template or donor to begin."))
         set_label_kind(self.status_label, "notice")
         status_layout.addWidget(self.status_label, 1)
-        self.details_toggle = QtWidgets.QPushButton("Show Details")
+        self.details_toggle = QtWidgets.QPushButton(_t("Show Details"))
         set_button_role(self.details_toggle, "subtle", icon_size=14)
         set_button_chrome(self.details_toggle, "detailsToggle", height=DETAILS_BUTTON_HEIGHT, icon_size=TOPBAR_BUTTON_ICON_SIZE)
         self.details_toggle.hide()
@@ -477,9 +479,9 @@ class CreatorWorkspace(QtWidgets.QWidget):
         buttons.setSpacing(SPACING.sm)
         buttons.setContentsMargins(0, 0, 0, 0)
         buttons.addStretch(1)
-        self.recommend_button = make_action_button("Recommend Price", role="subtle", icon=load_icon("curve.svg"), chrome="creatorFooter", height=CREATOR_BUTTON_HEIGHT)
-        self.cancel_button = make_action_button("Cancel", role="secondary", chrome="creatorFooter", height=CREATOR_BUTTON_HEIGHT)
-        self.create_button = make_action_button("Create", role="primary", chrome="creatorFooterPrimary", height=CREATOR_BUTTON_HEIGHT, icon_size=PRIMARY_BUTTON_ICON_SIZE)
+        self.recommend_button = make_action_button(_t("Recommend Price"), role="subtle", icon=load_icon("curve.svg"), chrome="creatorFooter", height=CREATOR_BUTTON_HEIGHT)
+        self.cancel_button = make_action_button(_t("Cancel"), role="secondary", chrome="creatorFooter", height=CREATOR_BUTTON_HEIGHT)
+        self.create_button = make_action_button(_t("Create"), role="primary", chrome="creatorFooterPrimary", height=CREATOR_BUTTON_HEIGHT, icon_size=PRIMARY_BUTTON_ICON_SIZE)
         buttons.addWidget(self.recommend_button)
         buttons.addWidget(self.cancel_button)
         buttons.addWidget(self.create_button)
@@ -528,12 +530,12 @@ class CreatorWorkspace(QtWidgets.QWidget):
         self.name_edit.clear()
         self.name_edit.setPlaceholderText("")
         self.name_edit.blockSignals(False)
-        self.eyebrow_label.setText("CREATE")
-        self.title_label.setText("Create")
+        self.eyebrow_label.setText(_t("CREATE"))
+        self.title_label.setText(_t("Create"))
         self.badge_label.hide()
-        self.summary_label.setText("Choose a flow from the left rail to begin.")
+        self.summary_label.setText(_t("Choose a flow from the left rail to begin."))
         self.recommend_button.hide()
-        self.create_button.setText("Create")
+        self.create_button.setText(_t("Create"))
         self.create_button.setIcon(QtGui.QIcon())
         self.create_button.setEnabled(False)
         self.details_text.hide()
@@ -542,7 +544,7 @@ class CreatorWorkspace(QtWidgets.QWidget):
             self._install_form()
         if self.form:
             self.form.clear()
-        self._set_status("Choose a template or donor to begin.", "notice")
+        self._set_status(_t("Choose a template or donor to begin."), "notice")
 
     # Engine-creator fields the user shouldn't touch directly. They're
     # either set automatically from other inputs (FuelType -> derived
@@ -573,10 +575,10 @@ class CreatorWorkspace(QtWidgets.QWidget):
         self.current_row = None
         self.current_detail = None
         self._install_form(hidden_properties=self._ALWAYS_HIDDEN_ENGINE_FIELDS)
-        self.eyebrow_label.setText("FORK" if fixed_template else "CREATE")
-        self.title_label.setText("Fork Engine" if fixed_template else "Create Engine")
+        self.eyebrow_label.setText(_t("FORK") if fixed_template else _t("CREATE"))
+        self.title_label.setText(_t("Fork Engine") if fixed_template else _t("Create Engine"))
         self.recommend_button.show()
-        self.create_button.setText("Create Engine")
+        self.create_button.setText(_t("Create Engine"))
         self.create_button.setIcon(self.app.primary_icons["engine"])
         self.name_edit.blockSignals(True)
         self.name_edit.clear()
@@ -596,10 +598,10 @@ class CreatorWorkspace(QtWidgets.QWidget):
             self.load_part(dict(initial_donor.get("detail") or {}), row=None)
         else:
             self.badge_label.hide()
-            self.summary_label.setText("Pick a Vehicle Type below to set the donor, then fill in the form.")
+            self.summary_label.setText(_t("Pick a Vehicle Type below to set the donor, then fill in the form."))
             if self.form:
-                self.form.clear("Choose a vehicle type to start building a new engine.")
-            self._set_status("Pick a Vehicle Type to start.", "notice")
+                self.form.clear(_t("Choose a vehicle type to start building a new engine."))
+            self._set_status(_t("Pick a Vehicle Type to start."), "notice")
             self.create_button.setEnabled(False)
 
     def begin_tire(self, live_version: str) -> None:
@@ -610,22 +612,24 @@ class CreatorWorkspace(QtWidgets.QWidget):
         self.part_type = "tire"
         self.current_row = None
         self.current_detail = None
-        self._install_form(hidden_properties=("MaxSpeed",), section_title_overrides={"Load and Speed": "Load and Resistance"})
-        self.eyebrow_label.setText("CREATE")
-        self.title_label.setText("Create Tire")
+        self._install_form(hidden_properties=("MaxSpeed",), section_title_overrides={_t("Load and Speed"): _t("Load and Resistance")})
+        self.eyebrow_label.setText(_t("CREATE"))
+        self.title_label.setText(_t("Create Tire"))
         self.badge_label.hide()
-        self.summary_label.setText("Choose a donor tire from the left rail.")
+        self.summary_label.setText(_t("Choose a donor tire from the left rail."))
         self.recommend_button.hide()
-        self.create_button.setText("Create Tire")
+        self.create_button.setText(_t("Create Tire"))
         self.create_button.setIcon(self.app.primary_icons["tire"])
         self.name_edit.blockSignals(True)
         self.name_edit.clear()
+        # Placeholder is a sample tire-name pattern, not user-facing
+        # prose, so we leave it as-is even with i18n enabled.
         self.name_edit.setPlaceholderText("myCustomTire")
         self.name_edit.blockSignals(False)
         self.original_name = ""
         if self.form:
-            self.form.clear("Choose a donor tire from the left rail to start building a new tire.")
-        self._set_status("Choose a donor tire to preview coverage.", "notice")
+            self.form.clear(_t("Choose a donor tire from the left rail to start building a new tire."))
+        self._set_status(_t("Choose a donor tire to preview coverage."), "notice")
         self.create_button.setEnabled(False)
 
     def load_part(self, detail: Dict[str, Any], row: Optional[Dict[str, Any]]) -> None:
@@ -650,10 +654,10 @@ class CreatorWorkspace(QtWidgets.QWidget):
             answer = QtWidgets.QMessageBox.question(
                 self,
                 APP_NAME,
-                "Switching to a different fuel type requires reloading the "
+                _t("Switching to a different fuel type requires reloading the "
                 "form using a different donor engine. Your current property "
                 "values will be replaced with the new donor's defaults.\n\n"
-                "Continue?",
+                "Continue?"),
                 QtWidgets.QMessageBox.StandardButton.Yes
                 | QtWidgets.QMessageBox.StandardButton.Cancel,
                 QtWidgets.QMessageBox.StandardButton.Cancel,
@@ -666,8 +670,11 @@ class CreatorWorkspace(QtWidgets.QWidget):
         if not detail or detail.get("error"):
             QtWidgets.QMessageBox.critical(
                 self, APP_NAME,
-                f"Could not load donor '{target_path}': "
-                f"{(detail or {}).get('error', 'unknown error')}",
+                _t("Could not load donor '{target_path}': "
+                "{error}").format(
+                    target_path=target_path,
+                    error=(detail or {}).get('error', 'unknown error')
+                ),
             )
             self.form.revert_fuel_type_combo()
             return
@@ -691,7 +698,7 @@ class CreatorWorkspace(QtWidgets.QWidget):
                 apply_tone_badge(self.badge_label, theme["label"], theme["key"])
                 self.badge_label.show()
                 details = "  •  ".join(part for part in [str(row.get("group_label") or "").strip(), str(row.get("description") or "").strip()] if part)
-                self.summary_label.setText(details or "Template loaded.")
+                self.summary_label.setText(details or _t("Template loaded."))
                 return
             if self.fixed_template and self.current_detail:
                 state = build_engine_state(self.current_detail)
@@ -699,18 +706,18 @@ class CreatorWorkspace(QtWidgets.QWidget):
                 apply_tone_badge(self.badge_label, theme["label"], theme["key"])
                 self.badge_label.show()
                 name = str(self.fixed_template.get("name") or self.current_detail.get("name") or "").strip()
-                self.summary_label.setText(f"Forking from {name}")
+                self.summary_label.setText(_t("Forking from {name}").format(name=name))
                 return
             self.badge_label.hide()
-            self.summary_label.setText("Choose an engine template from the left rail.")
+            self.summary_label.setText(_t("Choose an engine template from the left rail."))
             return
         self.badge_label.hide()
         if self.current_row:
             group_label = str(self.current_row.get("group_label") or "").strip()
-            source = str(self.current_row.get("source") or "template donor").strip()
+            source = str(self.current_row.get("source") or _t("template donor")).strip()
             self.summary_label.setText("  •  ".join(bit for bit in [group_label, source] if bit))
         else:
-            self.summary_label.setText("Choose a donor tire from the left rail.")
+            self.summary_label.setText(_t("Choose a donor tire from the left rail."))
 
     def _set_status(self, text: str, kind: str) -> None:
         self.status_label.setText(text)
@@ -720,11 +727,11 @@ class CreatorWorkspace(QtWidgets.QWidget):
     def _toggle_details(self) -> None:
         showing = not self.details_text.isVisible()
         self.details_text.setVisible(showing)
-        self.details_toggle.setText("Hide Details" if showing else "Show Details")
+        self.details_toggle.setText(_t("Hide Details") if showing else _t("Show Details"))
 
     def _refresh_status(self) -> None:
         if not self.form or not self.current_detail:
-            default_text = "Choose a donor tire to preview coverage." if self.part_type == "tire" else "Choose a template to start."
+            default_text = _t("Choose a donor tire to preview coverage.") if self.part_type == "tire" else _t("Choose a template to start.")
             self._set_status(default_text, "notice")
             self.details_text.hide()
             self.details_toggle.hide()
@@ -732,7 +739,7 @@ class CreatorWorkspace(QtWidgets.QWidget):
         if self.part_type == "engine":
             warnings = build_engine_warnings(self.form.get_engine_state())
             if not warnings:
-                self._set_status("Validation OK. No risky values detected.", "ok")
+                self._set_status(_t("Validation OK. No risky values detected."), "ok")
                 self.details_text.hide()
                 self.details_toggle.hide()
                 return
@@ -741,15 +748,15 @@ class CreatorWorkspace(QtWidgets.QWidget):
             notice_count = sum(1 for item in warnings if item.get("level") == "notice")
             parts = []
             if danger_count:
-                parts.append(f"{danger_count} danger")
+                parts.append(_t("{count} danger").format(count=danger_count))
             if warning_count:
-                parts.append(f"{warning_count} warning")
+                parts.append(_t("{count} warning").format(count=warning_count))
             if notice_count:
-                parts.append(f"{notice_count} notice")
-            self._set_status("  •  ".join(parts) + " need attention.", "danger" if danger_count else "warning")
+                parts.append(_t("{count} notice").format(count=notice_count))
+            self._set_status("  •  ".join(parts) + _t(" need attention."), "danger" if danger_count else "warning")
             self.details_text.setPlainText("\n".join(f"• [{item['level'].upper()}] {item['text']}" for item in warnings))
             self.details_text.hide()
-            self.details_toggle.setText("Show Details")
+            self.details_toggle.setText(_t("Show Details"))
             self.details_toggle.show()
             return
 
@@ -770,33 +777,33 @@ class CreatorWorkspace(QtWidgets.QWidget):
             summary_parts.append(f"{format_compact_metric(street)} G street")
             if offroad is not None and abs(offroad - street) > 0.01:
                 summary_parts.append(f"{format_compact_metric(offroad)} G offroad")
-            details.append(f"Estimated street grip:  {format_number(street)} G")
+            details.append(_t("Estimated street grip:  {street} G").format(street=format_number(street)))
             if offroad is not None:
-                details.append(f"Estimated offroad grip: {format_number(offroad)} G")
+                details.append(_t("Estimated offroad grip: {offroad} G").format(offroad=format_number(offroad)))
             details.append("")
-            details.append("Formula:")
+            details.append(_t("Formula:"))
             details.append(
-                "  Street  G  =  Cornering Stiffness  +  (Camber Stiffness ÷ 2)"
+                _t("  Street  G  =  Cornering Stiffness  +  (Camber Stiffness ÷ 2)")
             )
             details.append(
-                "  Offroad G  =  Street G  ×  (1  +  GripMultiplier ÷ 100)"
+                _t("  Offroad G  =  Street G  ×  (1  +  GripMultiplier ÷ 100)")
             )
             details.append("")
-            details.append("Worked example for this tire:")
+            details.append(_t("Worked example for this tire:"))
             for line in (grip_info.get('formula') or '').splitlines():
                 if line.strip():
                     details.append(f"  {line}")
             details.append("")
             details.append(
-                "Camber Stiffness counts at half weight because it only "
+                _t("Camber Stiffness counts at half weight because it only "
                 "kicks in when the wheel is cambered into a corner. "
                 "Tires that don't expose Camber Stiffness on their "
-                "layout treat it as 0."
+                "layout treat it as 0.")
             )
             details.append(
-                "These are quick estimates — the real in-game peak also "
+                _t("These are quick estimates — the real in-game peak also "
                 "depends on load, temperature, surface, and the slip-"
-                "stiffness fields, which a single scalar can't capture."
+                "stiffness fields, which a single scalar can't capture.")
             )
 
         # Use-case recommendation block.
@@ -805,17 +812,17 @@ class CreatorWorkspace(QtWidgets.QWidget):
             confidence_pct = int(round(archetype['confidence'] * 100))
             primary = archetype['primary_label']
             secondary = archetype.get('secondary_label')
-            line = f"Recommended use:  {primary}  (confidence ~{confidence_pct}%)"
+            line = _t("Recommended use:  {primary}  (confidence ~{pct}%)").format(primary=primary, pct=confidence_pct)
             if secondary:
-                line += f"\n                  also fits: {secondary}"
+                line += _t("\n                  also fits: {secondary}").format(secondary=secondary)
             details.append(line)
             if archetype.get('primary_reasons'):
-                details.append("Why:")
+                details.append(_t("Why:"))
                 for reason in archetype['primary_reasons'][:6]:
                     details.append(f"  • {reason}")
             details.append(
-                "(Heuristic — based on stiffness / load / wear values vs "
-                "vanilla MT tire patterns. Not from any documented spec.)"
+                _t("(Heuristic — based on stiffness / load / wear values vs "
+                "vanilla MT tire patterns. Not from any documented spec.)")
             )
 
         # Coverage count is included in the compact summary at the top
@@ -825,12 +832,12 @@ class CreatorWorkspace(QtWidgets.QWidget):
         # (see _add_property_row) so the user only ever sees what
         # they can actually edit.
         if coverage:
-            summary_parts.append(f"{coverage['property_count']}/{coverage['known_count']} fields")
-        self._set_status("  •  ".join(summary_parts) if summary_parts else "Coverage ready.", "ok")
+            summary_parts.append(_t("{count}/{total} fields").format(count=coverage['property_count'], total=coverage['known_count']))
+        self._set_status("  •  ".join(summary_parts) if summary_parts else _t("Coverage ready."), "ok")
         self.details_text.setPlainText("\n".join(details))
         if details:
             self.details_text.hide()
-            self.details_toggle.setText("Show Details")
+            self.details_toggle.setText(_t("Show Details"))
             self.details_toggle.show()
         else:
             self.details_text.hide()
@@ -854,12 +861,12 @@ class CreatorWorkspace(QtWidgets.QWidget):
             return
         torque_nm = self.form.get_engine_state().get("maxTorqueNm")
         if torque_nm is None:
-            QtWidgets.QMessageBox.information(self, APP_NAME, "Set a valid Max Torque value first.")
+            QtWidgets.QMessageBox.information(self, APP_NAME, _t("Set a valid Max Torque value first."))
             return
         include_bikes = self.form.get_engine_state().get("variant") == "bike"
         result = self.service.recommend_engine_price(torque_nm, include_bikes=include_bikes)
         if result.get("error"):
-            QtWidgets.QMessageBox.critical(self, APP_NAME, str(result.get("error")))
+            QtWidgets.QMessageBox.critical(self, APP_NAME, _t(str(result.get("error"))))
             return
         widget = self.form.shop_widgets.get("price")
         if isinstance(widget, QtWidgets.QLineEdit):
@@ -867,17 +874,17 @@ class CreatorWorkspace(QtWidgets.QWidget):
 
     def submit(self) -> None:
         if not self.current_detail or not self.form:
-            QtWidgets.QMessageBox.information(self, APP_NAME, "Choose a template or donor first.")
+            QtWidgets.QMessageBox.information(self, APP_NAME, _t("Choose a template or donor first."))
             return
         name = self.name_edit.text().strip()
         if not name:
-            QtWidgets.QMessageBox.information(self, APP_NAME, f"Enter the new {self.part_type} name.")
+            QtWidgets.QMessageBox.information(self, APP_NAME, _t("Enter the new {part_type} name.").format(part_type=self.part_type))
             return
         if self.app.current_part and self.app.editor_form.has_changes():
             answer = QtWidgets.QMessageBox.question(
                 self,
                 APP_NAME,
-                "Creating a new part reloads the workspace and will discard unsaved edits on the currently selected generated part. Continue?",
+                _t("Creating a new part reloads the workspace and will discard unsaved edits on the currently selected generated part. Continue?"),
             )
             if answer != QtWidgets.QMessageBox.StandardButton.Yes:
                 return
@@ -919,20 +926,20 @@ class CreatorWorkspace(QtWidgets.QWidget):
                     return
                 if not result or result.get("error"):
                     if result and result.get("conflict"):
-                        conflict = self.service.build_conflict_state(result, "Live data changed before the engine was created.")
+                        conflict = self.service.build_conflict_state(result, _t("Live data changed before the engine was created."))
                         reload_now = QtWidgets.QMessageBox.question(
                             self,
                             APP_NAME,
-                            f"{conflict.message}\n\nReload the workspace before trying again?",
+                            _t("{message}\n\nReload the workspace before trying again?").format(message=conflict.message),
                         )
                         if reload_now == QtWidgets.QMessageBox.StandardButton.Yes:
                             self.app.reload_workspace()
                         return
-                    QtWidgets.QMessageBox.critical(self, APP_NAME, str((result or {}).get("error") or "Create engine failed."))
+                    QtWidgets.QMessageBox.critical(self, APP_NAME, _t(str((result or {}).get("error") or "Create engine failed.")))
                     return
                 self.created.emit(str(result.get("path") or ""))
 
-            self.app.run_task("Creating engine...", lambda: self.service.create_engine(payload), on_done)
+            self.app.run_task(_t("Creating engine..."), lambda: self.service.create_engine(payload), on_done)
             return
 
         shop = self.form.collect_shop_values()
@@ -962,17 +969,17 @@ class CreatorWorkspace(QtWidgets.QWidget):
                 return
             if not result or result.get("error"):
                 if result and result.get("conflict"):
-                    conflict = self.service.build_conflict_state(result, "Live data changed before the tire was created.")
+                    conflict = self.service.build_conflict_state(result, _t("Live data changed before the tire was created."))
                     reload_now = QtWidgets.QMessageBox.question(
                         self,
                         APP_NAME,
-                        f"{conflict.message}\n\nReload the workspace before trying again?",
+                        _t("{message}\n\nReload the workspace before trying again?").format(message=conflict.message),
                     )
                     if reload_now == QtWidgets.QMessageBox.StandardButton.Yes:
                         self.app.reload_workspace()
                     return
-                QtWidgets.QMessageBox.critical(self, APP_NAME, str((result or {}).get("error") or "Create tire failed."))
+                QtWidgets.QMessageBox.critical(self, APP_NAME, _t(str((result or {}).get("error") or "Create tire failed.")))
                 return
             self.created.emit(str(result.get("path") or ""))
 
-        self.app.run_task("Creating tire...", lambda: self.service.create_tire(payload), on_done)
+        self.app.run_task(_t("Creating tire..."), lambda: self.service.create_tire(payload), on_done)

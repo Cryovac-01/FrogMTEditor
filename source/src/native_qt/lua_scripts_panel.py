@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from i18n import _ as _t
 from lua_mods import all_deployers, DEFAULT_OUTPUT_DIR, Setting
 from lua_mods._shared import write_mods_txt
 
@@ -152,7 +153,7 @@ class _LuaScriptsWelcomeDialog(QtWidgets.QDialog):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Lua Mods \u2014 Please Read")
+        self.setWindowTitle(_t("Lua Mods \u2014 Please Read"))
         self.setModal(True)
         self.setMinimumSize(680, 600)
 
@@ -170,7 +171,7 @@ class _LuaScriptsWelcomeDialog(QtWidgets.QDialog):
         banner_l.setContentsMargins(24, 20, 24, 20)
         banner_l.setSpacing(4)
 
-        title = QtWidgets.QLabel("IMPORTANT \u2014 PLEASE READ")
+        title = QtWidgets.QLabel(_t("IMPORTANT \u2014 PLEASE READ"))
         title.setStyleSheet(
             "color: #ff4040; font-size: 28px; font-weight: 800; "
             "letter-spacing: 1px;"
@@ -179,9 +180,9 @@ class _LuaScriptsWelcomeDialog(QtWidgets.QDialog):
         banner_l.addWidget(title)
 
         subtitle = QtWidgets.QLabel(
-            "Everything on the Lua Mods tab depends on UE4SS. If you "
+            _t("Everything on the Lua Mods tab depends on UE4SS. If you "
             "haven't installed UE4SS yet, the mods you generate will "
-            "not load. Take a minute to read this before deploying."
+            "not load. Take a minute to read this before deploying.")
         )
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet(f"color: {_MUTED}; font-size: 13px;")
@@ -224,7 +225,7 @@ class _LuaScriptsWelcomeDialog(QtWidgets.QDialog):
         footer_l.setContentsMargins(24, 14, 24, 14)
         footer_l.setSpacing(12)
 
-        self._hide_next_cb = QtWidgets.QCheckBox("Don't show this again")
+        self._hide_next_cb = QtWidgets.QCheckBox(_t("Don't show this again"))
         self._hide_next_cb.setStyleSheet(
             f"QCheckBox {{ color: {_TEXT}; font-size: 12px; }}"
         )
@@ -232,7 +233,7 @@ class _LuaScriptsWelcomeDialog(QtWidgets.QDialog):
 
         footer_l.addStretch(1)
 
-        ue4ss_btn = QtWidgets.QPushButton("Open UE4SS releases page")
+        ue4ss_btn = QtWidgets.QPushButton(_t("Open UE4SS releases page"))
         ue4ss_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent;
@@ -250,7 +251,7 @@ class _LuaScriptsWelcomeDialog(QtWidgets.QDialog):
         ))
         footer_l.addWidget(ue4ss_btn)
 
-        ok_btn = QtWidgets.QPushButton("OK \u2014 continue to Lua Mods")
+        ok_btn = QtWidgets.QPushButton(_t("OK \u2014 continue to Lua Mods"))
         ok_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {_ACCENT};
@@ -593,8 +594,8 @@ class _ModCard(QtWidgets.QFrame):
         self._enable_cb.setCheckable(True)
         self._enable_cb.setChecked(initial_enabled)
         self._enable_cb.setToolTip(
-            "Tick to include this mod when you click the global "
-            "'Deploy enabled Lua mods' button."
+            _t("Tick to include this mod when you click the global "
+            "'Deploy enabled Lua mods' button.")
         )
         self._enable_cb.setMinimumWidth(92)
         self._enable_cb.setFixedHeight(28)
@@ -622,7 +623,7 @@ class _ModCard(QtWidgets.QFrame):
 
         def _update_enable_label() -> None:
             self._enable_cb.setText(
-                "\u2714 Enabled" if self._enable_cb.isChecked() else "Disabled"
+                _t("\u2714 Enabled") if self._enable_cb.isChecked() else _t("Disabled")
             )
         _update_enable_label()
         self._enable_cb.toggled.connect(lambda _=0: _update_enable_label())
@@ -644,7 +645,7 @@ class _ModCard(QtWidgets.QFrame):
         self._expand_btn.setFixedHeight(28)
         self._expand_btn.setMinimumWidth(110)
         self._expand_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        self._expand_btn.setToolTip("Show or hide this mod's configuration.")
+        self._expand_btn.setToolTip(_t("Show or hide this mod's configuration."))
         self._expand_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {_CARD};
@@ -709,7 +710,7 @@ class _ModCard(QtWidgets.QFrame):
         action_row = QtWidgets.QHBoxLayout()
         action_row.setSpacing(8)
 
-        help_btn = QtWidgets.QPushButton("Setup instructions")
+        help_btn = QtWidgets.QPushButton(_t("Setup instructions"))
         help_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent;
@@ -724,7 +725,7 @@ class _ModCard(QtWidgets.QFrame):
         help_btn.clicked.connect(self._show_instructions)
         action_row.addWidget(help_btn)
 
-        deploy_btn = QtWidgets.QPushButton("Deploy only this")
+        deploy_btn = QtWidgets.QPushButton(_t("Deploy only this"))
         deploy_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {_ACCENT};
@@ -767,9 +768,9 @@ class _ModCard(QtWidgets.QFrame):
         # visual cue. When expanded, the body is visible so "Collapse ▲".
         # When collapsed, "Expand ▼".
         if self._expanded:
-            self._expand_btn.setText("Collapse \u25B2")
+            self._expand_btn.setText(_t("Collapse \u25B2"))
         else:
-            self._expand_btn.setText("Expand \u25BC")
+            self._expand_btn.setText(_t("Expand \u25BC"))
 
     def set_expanded(self, value: bool) -> None:
         if value != self._expanded:
@@ -781,9 +782,9 @@ class _ModCard(QtWidgets.QFrame):
         try:
             text = self._deployer.generate_readme(cfg)
         except Exception as e:
-            text = f"(could not generate README: {e})"
+            text = _t("(could not generate README: {e})").format(e=e)
         dlg = QtWidgets.QDialog(self)
-        dlg.setWindowTitle(f"{self._deployer.UI_TITLE} — Setup instructions")
+        dlg.setWindowTitle(_t("{title} — Setup instructions").format(title=self._deployer.UI_TITLE))
         dlg.setMinimumSize(640, 520)
         lay = QtWidgets.QVBoxLayout(dlg)
         lay.setContentsMargins(18, 18, 18, 18)
@@ -801,13 +802,13 @@ class _ModCard(QtWidgets.QFrame):
         """)
         lay.addWidget(pt, 1)
         btn_row = QtWidgets.QHBoxLayout()
-        ue4ss = QtWidgets.QPushButton("Open UE4SS releases page")
+        ue4ss = QtWidgets.QPushButton(_t("Open UE4SS releases page"))
         ue4ss.clicked.connect(lambda: QtGui.QDesktopServices.openUrl(
             QtCore.QUrl("https://github.com/UE4SS-RE/RE-UE4SS/releases")
         ))
         btn_row.addWidget(ue4ss)
         btn_row.addStretch(1)
-        close = QtWidgets.QPushButton("Close")
+        close = QtWidgets.QPushButton(_t("Close"))
         close.clicked.connect(dlg.accept)
         close.setDefault(True)
         btn_row.addWidget(close)
@@ -887,15 +888,15 @@ class LuaScriptsPanel(QtWidgets.QWidget):
         header_row = QtWidgets.QHBoxLayout()
         header_row.setSpacing(14)
 
-        title = QtWidgets.QLabel("LUA Scripts")
+        title = QtWidgets.QLabel(_t("LUA Scripts"))
         title.setStyleSheet(f"color: {_TEXT}; font-size: 20px; font-weight: 600;")
         header_row.addWidget(title)
 
         header_row.addStretch(1)
 
-        self._welcome_btn = QtWidgets.QPushButton("Show welcome")
+        self._welcome_btn = QtWidgets.QPushButton(_t("Show welcome"))
         self._welcome_btn.setToolTip(
-            "Re-open the UE4SS + install-instructions welcome dialog."
+            _t("Re-open the UE4SS + install-instructions welcome dialog.")
         )
         self._welcome_btn.setStyleSheet(f"""
             QPushButton {{
@@ -912,7 +913,7 @@ class LuaScriptsPanel(QtWidgets.QWidget):
         self._welcome_btn.clicked.connect(self.show_welcome_dialog)
         header_row.addWidget(self._welcome_btn)
 
-        self._deploy_all_btn = QtWidgets.QPushButton("Deploy enabled Lua mods")
+        self._deploy_all_btn = QtWidgets.QPushButton(_t("Deploy enabled Lua mods"))
         self._deploy_all_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {_ACCENT};
@@ -935,12 +936,12 @@ class LuaScriptsPanel(QtWidgets.QWidget):
         root.addLayout(header_row)
 
         subtitle = QtWidgets.QLabel(
-            "Each Lua mod here runs through UE4SS at runtime. Tick the checkbox "
+            _t("Each Lua mod here runs through UE4SS at runtime. Tick the checkbox "
             "on the mods you want, configure them in their cards, then hit "
             "Deploy \u2014 every enabled mod is written as a ready-to-drop folder "
             "under <code>source/data/lua_mod_output/</code>. Full install "
             "instructions (including UE4SS setup) are on each card's "
-            "<i>Setup instructions</i> button."
+            "<i>Setup instructions</i> button.")
         )
         subtitle.setWordWrap(True)
         subtitle.setTextFormat(QtCore.Qt.TextFormat.RichText)
@@ -1023,8 +1024,7 @@ class LuaScriptsPanel(QtWidgets.QWidget):
         enabled = [(name, card) for name, card in self._cards.items() if card.enabled()]
         if not enabled:
             self._global_status.setText(
-                f"<span style='color: {_DANGER};'>No mods are enabled — "
-                "tick the checkbox on each mod you want to deploy.</span>"
+                f"<span style='color: {_DANGER};'>{_t('No mods are enabled — tick the checkbox on each mod you want to deploy.')}</span>"
             )
             return
 
@@ -1053,30 +1053,40 @@ class LuaScriptsPanel(QtWidgets.QWidget):
         bad = [n for n, r in results.items() if not r.get('success')]
         summary_parts = []
         if ok:
+            mod_label = _t("Deployed {count} mod{plural}: {names}").format(
+                count=len(ok),
+                plural='s' if len(ok) != 1 else '',
+                names=', '.join(ok)
+            )
             summary_parts.append(
-                f"<span style='color: {_SUCCESS};'>\u2713 Deployed {len(ok)} mod"
-                f"{'s' if len(ok) != 1 else ''}: {', '.join(ok)}</span>"
+                f"<span style='color: {_SUCCESS};'>\u2713 {mod_label}</span>"
             )
         if bad:
+            fail_label = _t("{count} failed: {names}").format(
+                count=len(bad),
+                names=', '.join(bad)
+            )
             summary_parts.append(
-                f"<span style='color: {_DANGER};'>\u2717 {len(bad)} failed: "
-                f"{', '.join(bad)}</span>"
+                f"<span style='color: {_DANGER};'>\u2717 {fail_label}</span>"
             )
         if mods_txt_result.get('success'):
+            entry_label = _t("wrote mods.txt ({count} entr{plural})").format(
+                count=mods_txt_result['mod_count'],
+                plural='y' if mods_txt_result['mod_count'] == 1 else 'ies'
+            )
             summary_parts.append(
-                f"<span style='color: {_MUTED};'>wrote mods.txt "
-                f"({mods_txt_result['mod_count']} entr"
-                f"{'y' if mods_txt_result['mod_count'] == 1 else 'ies'})"
-                f"</span>"
+                f"<span style='color: {_MUTED};'>{entry_label}</span>"
             )
         else:
+            fail_msg = _t("mods.txt write failed: {error}").format(
+                error=mods_txt_result.get('error', '?')
+            )
             summary_parts.append(
-                f"<span style='color: {_DANGER};'>mods.txt write failed: "
-                f"{mods_txt_result.get('error', '?')}</span>"
+                f"<span style='color: {_DANGER};'>{fail_msg}</span>"
             )
         summary_parts.append(
             f"<a href='open-output' style='color: {_ACCENT};'>"
-            f"Open output folder</a>"
+            f"{_t('Open output folder')}</a>"
         )
         self._global_status.setText("  \u2014  ".join(summary_parts))
         self._save_to_disk()
@@ -1087,7 +1097,7 @@ class LuaScriptsPanel(QtWidgets.QWidget):
             path = result.get('path', '')
             self._last_output_paths[card._deployer.MOD_NAME] = path
             card.set_status(
-                f"<span style='color: {_SUCCESS};'>\u2713 deployed to</span> "
+                f"<span style='color: {_SUCCESS};'>\u2713 {_t('deployed to')}</span> "
                 f"<a href='open:{card._deployer.MOD_NAME}' style='color: {_ACCENT};'>"
                 f"{path.replace(chr(92), '/')}</a>"
             )
@@ -1098,9 +1108,10 @@ class LuaScriptsPanel(QtWidgets.QWidget):
                 pass
             card.status_label.linkActivated.connect(self._on_status_link)
         else:
-            err = result.get('error', 'unknown error')
+            err = result.get('error', _t('unknown error'))
+            fail_msg = _t('deploy failed: {error}').format(error=err)
             card.set_status(
-                f"<span style='color: {_DANGER};'>\u2717 deploy failed: {err}</span>"
+                f"<span style='color: {_DANGER};'>\u2717 {fail_msg}</span>"
             )
 
     def _on_status_link(self, href: str) -> None:

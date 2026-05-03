@@ -14,6 +14,7 @@ import os
 from typing import Dict, List, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
+from i18n import _ as _t
 
 # ---------------------------------------------------------------------------
 # Colour tokens (consistent with main app theme)
@@ -181,22 +182,22 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
         scroll.setWidget(container)
 
         # ── Header ──
-        scroll_layout.addWidget(_label("Transmission Editor", "title"))
+        scroll_layout.addWidget(_label(_t("Transmission Editor"), "title"))
         scroll_layout.addWidget(_label(
-            "Browse vanilla transmissions, modify shift time and gear ratios, "
-            "then create a modified clone. Faster shift times simulate clutch upgrades.",
+            _t("Browse vanilla transmissions, modify shift time and gear ratios, "
+            "then create a modified clone. Faster shift times simulate clutch upgrades."),
             "muted",
         ))
 
         # ── Unpacked folder selector ──
         folder_card = self._make_card()
         folder_layout = folder_card.layout()
-        folder_layout.addWidget(_label("UNPACKED GAME FILES", "eyebrow"))
+        folder_layout.addWidget(_label(_t("UNPACKED GAME FILES"), "eyebrow"))
 
         folder_row = QtWidgets.QHBoxLayout()
-        self.folder_label = _label("Not set", "muted")
+        self.folder_label = _label(_t("Not set"), "muted")
         folder_row.addWidget(self.folder_label, 1)
-        self.folder_button = _action_button("Select Unpacked Folder", "secondary")
+        self.folder_button = _action_button(_t("Select Unpacked Folder"), "secondary")
         self.folder_button.clicked.connect(self._on_select_folder)
         folder_row.addWidget(self.folder_button)
         folder_layout.addLayout(folder_row)
@@ -209,7 +210,7 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
         # Left: transmission list
         left_card = self._make_card()
         left_layout = left_card.layout()
-        left_layout.addWidget(_label("VANILLA TRANSMISSIONS", "eyebrow"))
+        left_layout.addWidget(_label(_t("VANILLA TRANSMISSIONS"), "eyebrow"))
 
         self.trans_list = QtWidgets.QListWidget()
         self.trans_list.setStyleSheet(_LIST_STYLE)
@@ -221,7 +222,7 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
         # Right: details + editor
         right_card = self._make_card()
         right_layout = right_card.layout()
-        right_layout.addWidget(_label("TRANSMISSION DETAILS", "eyebrow"))
+        right_layout.addWidget(_label(_t("TRANSMISSION DETAILS"), "eyebrow"))
 
         # Info labels
         self.info_name = _label("—", "accent")
@@ -235,11 +236,11 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
         info_grid.setSpacing(6)
         self._info_labels = {}
         info_fields = [
-            ("Clutch Type", "clutch_type"),
-            ("Category", "category"),
-            ("Forward Gears", "forward_gears"),
-            ("Reverse Gears", "reverse_gears"),
-            ("Shift Time", "shift_time"),
+            (_t("Clutch Type"), "clutch_type"),
+            (_t("Category"), "category"),
+            (_t("Forward Gears"), "forward_gears"),
+            (_t("Reverse Gears"), "reverse_gears"),
+            (_t("Shift Time"), "shift_time"),
         ]
         for row_idx, (display_name, key) in enumerate(info_fields):
             name_lbl = _label(display_name, "muted")
@@ -251,11 +252,11 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
         right_layout.addLayout(info_grid)
 
         # Gear ratio table
-        right_layout.addWidget(_label("Gear Ratios", "section"))
+        right_layout.addWidget(_label(_t("Gear Ratios"), "section"))
         self.gear_table = QtWidgets.QTableWidget()
         self.gear_table.setStyleSheet(_TABLE_STYLE)
         self.gear_table.setColumnCount(3)
-        self.gear_table.setHorizontalHeaderLabels(["Gear", "Ratio", "Efficiency"])
+        self.gear_table.setHorizontalHeaderLabels([_t("Gear"), _t("Ratio"), _t("Efficiency")])
         self.gear_table.horizontalHeader().setStretchLastSection(True)
         self.gear_table.verticalHeader().setVisible(False)
         self.gear_table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -269,24 +270,24 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
         # ── Modification card ──
         mod_card = self._make_card()
         mod_layout = mod_card.layout()
-        mod_layout.addWidget(_label("CREATE MODIFIED TRANSMISSION", "eyebrow"))
+        mod_layout.addWidget(_label(_t("CREATE MODIFIED TRANSMISSION"), "eyebrow"))
         mod_layout.addWidget(_label(
-            "Adjust the shift time below then create a new transmission asset. "
-            "Lower shift time = faster gear changes (clutch upgrade effect).",
+            _t("Adjust the shift time below then create a new transmission asset. "
+            "Lower shift time = faster gear changes (clutch upgrade effect)."),
             "muted",
         ))
 
         # New name input
         name_row = QtWidgets.QHBoxLayout()
-        name_row.addWidget(_label("New Name:", "body"))
+        name_row.addWidget(_label(_t("New Name:"), "body"))
         self.name_edit = QtWidgets.QLineEdit()
         self.name_edit.setStyleSheet(_INPUT_STYLE)
-        self.name_edit.setPlaceholderText("e.g. Truck_6Speed_Stage2")
+        self.name_edit.setPlaceholderText(_t("e.g. Truck_6Speed_Stage2"))
         name_row.addWidget(self.name_edit, 1)
         mod_layout.addLayout(name_row)
 
         # Shift time slider
-        mod_layout.addWidget(_label("Shift Time", "section"))
+        mod_layout.addWidget(_label(_t("Shift Time"), "section"))
 
         shift_row = QtWidgets.QHBoxLayout()
         shift_row.setSpacing(12)
@@ -348,7 +349,7 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
         # Create button
         button_row = QtWidgets.QHBoxLayout()
         button_row.addStretch()
-        self.create_button = _action_button("Create Modified Transmission", "primary")
+        self.create_button = _action_button(_t("Create Modified Transmission"), "primary")
         self.create_button.setEnabled(False)
         self.create_button.clicked.connect(self._on_create)
         button_row.addWidget(self.create_button)
@@ -381,7 +382,7 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
     # ------------------------------------------------------------------
     def _on_select_folder(self) -> None:
         path = QtWidgets.QFileDialog.getExistingDirectory(
-            self, "Select Unpacked MotorTown Folder",
+            self, _t("Select Unpacked MotorTown Folder"),
         )
         if path:
             self.set_unpacked_folder(path)
@@ -416,7 +417,7 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
                 continue
 
         if trans_dir is None:
-            self.status_label.setText("No Transmission folder found in selected path.")
+            self.status_label.setText(_t("No Transmission folder found in selected path."))
             self.status_label.setStyleSheet(f"color: #e74c3c; font-size: 12px;")
             return
 
@@ -475,7 +476,7 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
                 self._transmissions[name] = {'error': str(e)}
                 self.trans_list.addItem(f"{name}  (parse error)")
 
-        self.status_label.setText(f"Loaded {len(self._transmissions)} transmissions.")
+        self.status_label.setText(_t("Loaded {n} transmissions.").format(n=len(self._transmissions)))
         self.status_label.setStyleSheet(f"color: {_SUCCESS}; font-size: 12px;")
 
     # ------------------------------------------------------------------
@@ -493,7 +494,8 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
         info = self._transmissions.get(name)
         if not info or 'error' in info:
             self.info_name.setText(name)
-            self.info_description.setText(f"Error: {info.get('error', 'unknown')}" if info else "Not found")
+            error_msg = f"Error: {info.get('error', 'unknown')}" if info else _t("Not found")
+            self.info_description.setText(_t("Error: {msg}").format(msg=info.get('error', 'unknown')) if info else _t("Not found"))
             self.create_button.setEnabled(False)
             return
 
@@ -512,7 +514,7 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
             # Update slider to match
             self.shift_slider.setValue(int(round(shift / 0.01)))
         else:
-            self._info_labels['shift_time'].setText("N/A (torque converter)")
+            self._info_labels['shift_time'].setText(_t("N/A (torque converter)"))
 
         # Update gear table
         gears = info.get('gears', [])
@@ -540,13 +542,13 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
         info = self._transmissions[name]
         new_name = self.name_edit.text().strip()
         if not new_name:
-            self.status_label.setText("Please enter a name for the new transmission.")
+            self.status_label.setText(_t("Please enter a name for the new transmission."))
             self.status_label.setStyleSheet(f"color: #e74c3c; font-size: 12px;")
             return
 
         # Validate name (alphanumeric + underscore)
         if not all(c.isalnum() or c == '_' for c in new_name):
-            self.status_label.setText("Name must contain only letters, numbers, and underscores.")
+            self.status_label.setText(_t("Name must contain only letters, numbers, and underscores."))
             self.status_label.setStyleSheet(f"color: #e74c3c; font-size: 12px;")
             return
 
@@ -598,9 +600,14 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
             pct = ((orig_shift - new_shift) / orig_shift * 100) if orig_shift > 0 else 0
 
             self.status_label.setText(
-                f"Created '{new_name}' — shift time {new_shift:.2f}s "
-                f"({pct:+.1f}% from vanilla {orig_shift:.3f}s). "
-                f"Staged in mod tree."
+                _t("Created '{name}' — shift time {shift:.2f}s "
+                "({pct:+.1f}% from vanilla {orig:.3f}s). "
+                "Staged in mod tree.").format(
+                    name=new_name,
+                    shift=new_shift,
+                    pct=pct,
+                    orig=orig_shift
+                )
             )
             self.status_label.setStyleSheet(f"color: {_SUCCESS}; font-size: 12px; font-weight: 600;")
 
@@ -613,5 +620,5 @@ class TransmissionEditorPanel(QtWidgets.QWidget):
             })
 
         except Exception as e:
-            self.status_label.setText(f"Error creating transmission: {e}")
+            self.status_label.setText(_t("Error creating transmission: {err}").format(err=e))
             self.status_label.setStyleSheet(f"color: #e74c3c; font-size: 12px;")

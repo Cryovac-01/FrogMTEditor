@@ -25,6 +25,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from help_content import get_topic
 from . import theme_palette as _palette
 from . import scale as _scale
+from i18n import _ as _t
 
 
 # Visual constants resolved at call time from the central palette so
@@ -131,7 +132,7 @@ class HelpDialog(QtWidgets.QDialog):
         self._topic = get_topic(topic_key)
         self._sections: List[Dict[str, Any]] = list(self._topic.get('sections') or [])
 
-        self.setWindowTitle(f"Help — {self._topic.get('title', 'Frog Mod Editor')}")
+        self.setWindowTitle(_t("Help — {title}").format(title=self._topic.get('title', 'Frog Mod Editor')))
         # Build QSS from the active palette so the popup follows the
         # current theme (dark / light / high-contrast). Falls back to
         # the static _DIALOG_QSS only if the palette module is
@@ -178,7 +179,7 @@ class HelpDialog(QtWidgets.QDialog):
         left_layout.setSpacing(8)
 
         self._search_box = QtWidgets.QLineEdit()
-        self._search_box.setPlaceholderText("Search sections…")
+        self._search_box.setPlaceholderText(_t("Search sections…"))
         self._search_box.textChanged.connect(self._apply_search)
         left_layout.addWidget(self._search_box)
 
@@ -212,7 +213,7 @@ class HelpDialog(QtWidgets.QDialog):
         # Footer — close button
         footer = QtWidgets.QHBoxLayout()
         footer.addStretch(1)
-        close_btn = QtWidgets.QPushButton("Close")
+        close_btn = QtWidgets.QPushButton(_t("Close"))
         close_btn.setProperty('primary', True)
         close_btn.clicked.connect(self.accept)
         footer.addWidget(close_btn)
@@ -325,7 +326,7 @@ def make_need_help_header(topic_key,
         f"}}"
     )
     btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-    btn.setToolTip("Open detailed help for this page")
+    btn.setToolTip(_t("Open detailed help for this page"))
 
     def _on_click() -> None:
         # Resolve the topic key per-click so callable resolvers can

@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from i18n import _ as _t
+
 import economy_editor as eco
 
 
@@ -200,12 +202,12 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         banner_layout.setContentsMargins(20, 12, 20, 12)
         banner_layout.setSpacing(12)
         banner_layout.addWidget(_label(
-            "Unpacked game files not found. Select the folder containing the "
+            _t("Unpacked game files not found. Select the folder containing the "
             "unpacked Motor Town files (with MotorTown/Config/ inside) to enable "
-            "economy editing.",
+            "economy editing."),
             "warning",
         ), 1)
-        self.browse_unpacked_btn = _action_button("Select Unpacked Folder", "primary")
+        self.browse_unpacked_btn = _action_button(_t("Select Unpacked Folder"), "primary")
         self.browse_unpacked_btn.clicked.connect(self._browse_unpacked_folder)
         banner_layout.addWidget(self.browse_unpacked_btn)
         self.vanilla_banner.setVisible(not eco.vanilla_paths_ok())
@@ -223,13 +225,13 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         header_layout = QtWidgets.QVBoxLayout(header_card)
         header_layout.setContentsMargins(20, 16, 20, 16)
         header_layout.setSpacing(6)
-        header_layout.addWidget(_label("ECONOMY EDITOR", "eyebrow"))
-        header_layout.addWidget(_label("Game Economy & Payment Multipliers", "title"))
+        header_layout.addWidget(_label(_t("ECONOMY EDITOR"), "eyebrow"))
+        header_layout.addWidget(_label(_t("Game Economy & Payment Multipliers"), "title"))
         header_layout.addWidget(_label(
-            "Apply global multipliers to cargo payments, bus fares, taxi rates, fuel costs, "
+            _t("Apply global multipliers to cargo payments, bus fares, taxi rates, fuel costs, "
             "and other economy settings. Select 'Custom' in any dropdown to edit individual "
             "values. Changes are written to Balance.json and DefaultMotorTownBalance.ini "
-            "and packed into your mod automatically.",
+            "and packed into your mod automatically."),
             "muted",
         ))
         scroll_layout.addWidget(header_card)
@@ -247,13 +249,13 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         scaling_layout = QtWidgets.QVBoxLayout(scaling_card)
         scaling_layout.setContentsMargins(20, 16, 20, 16)
         scaling_layout.setSpacing(8)
-        scaling_layout.addWidget(_label("CARGO BALANCE", "eyebrow"))
-        scaling_layout.addWidget(_label("Vehicle Capacity Penalty moved", "section"))
+        scaling_layout.addWidget(_label(_t("CARGO BALANCE"), "eyebrow"))
+        scaling_layout.addWidget(_label(_t("Vehicle Capacity Penalty moved"), "section"))
         scaling_layout.addWidget(_label(
-            "The Low / High / Off pickup-vs-truck payment reshaping lives on the "
+            _t("The Low / High / Off pickup-vs-truck payment reshaping lives on the "
             "<b>LUA Scripts</b> tab now, alongside the rest of the Cryovac Lua "
             "mods. Open that panel to configure and deploy "
-            "<code>CryovacCargoScaling</code>.",
+            "<code>CryovacCargoScaling</code>."),
             "muted",
         ))
         scroll_layout.addWidget(scaling_card)
@@ -279,40 +281,40 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         company_layout = QtWidgets.QVBoxLayout(company_card)
         company_layout.setContentsMargins(20, 16, 20, 16)
         company_layout.setSpacing(8)
-        company_layout.addWidget(_label("COMPANY DRIVERS", "eyebrow"))
-        company_layout.addWidget(_label("AI Driver Profit Share removed", "section"))
+        company_layout.addWidget(_label(_t("COMPANY DRIVERS"), "eyebrow"))
+        company_layout.addWidget(_label(_t("AI Driver Profit Share removed"), "section"))
         company_layout.addWidget(_label(
-            "The profit-share preset was scaling "
+            _t("The profit-share preset was scaling "
             "<code>VehicleOwnerProfitShare</code> in the balance INI, but "
             "that field is global per vehicle class \u2014 it changed the "
             "profit share on every matching vehicle in the world, including "
             "AI-company and rental vehicles you don\u2019t own. A proper "
             "\u201conly my company\u201d profit share requires a runtime "
             "Lua hook; ask if you want one built. For now, the generated "
-            "mod INI keeps vanilla profit-share values (\u2248 5% in-game).",
+            "mod INI keeps vanilla profit-share values (\u2248 5% in-game)."),
             "muted",
         ))
         scroll_layout.addWidget(company_card)
 
         # -- Multiplier cards (all use sliders + custom checkbox) -----------
         for eyebrow, title, desc, key in [
-            ("GLOBAL ECONOMY", "Cargo & Delivery Payment Multiplier",
-             "Cargo delivery payments, tow/rescue rewards, box trailer payments, job income.",
+            (_t("GLOBAL ECONOMY"), _t("Cargo & Delivery Payment Multiplier"),
+             _t("Cargo delivery payments, tow/rescue rewards, box trailer payments, job income."),
              "economy"),
-            ("BUS RATES", "Bus Payment Multiplier",
-             "Bus base payment and per-100m payment rate.",
+            (_t("BUS RATES"), _t("Bus Payment Multiplier"),
+             _t("Bus base payment and per-100m payment rate."),
              "bus"),
-            ("TAXI RATES", "Taxi Payment Multiplier",
-             "Taxi payment per 100 meters.",
+            (_t("TAXI RATES"), _t("Taxi Payment Multiplier"),
+             _t("Taxi payment per 100 meters."),
              "taxi"),
-            ("AMBULANCE RATES", "Ambulance Payment Multiplier",
-             "Ambulance payment per 100 meters.",
+            (_t("AMBULANCE RATES"), _t("Ambulance Payment Multiplier"),
+             _t("Ambulance payment per 100 meters."),
              "ambulance"),
-            ("FUEL COSTS", "Fuel & Roadside Refueling Multiplier",
-             "Fuel cost per liter and roadside refueling base cost.",
+            (_t("FUEL COSTS"), _t("Fuel & Roadside Refueling Multiplier"),
+             _t("Fuel cost per liter and roadside refueling base cost."),
              "fuel"),
-            ("VEHICLE COSTS", "Tow-to-Road Cost Multiplier",
-             "Roadside tow-to-road cost per km.",
+            (_t("VEHICLE COSTS"), _t("Tow-to-Road Cost Multiplier"),
+             _t("Roadside tow-to-road cost per km."),
              "vehicle"),
         ]:
             card = self._build_slider_card(eyebrow, title, desc, key)
@@ -330,22 +332,22 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         cargo_layout = QtWidgets.QVBoxLayout(cargo_card)
         cargo_layout.setContentsMargins(20, 16, 20, 16)
         cargo_layout.setSpacing(8)
-        cargo_layout.addWidget(_label("CARGO PAYMENT PREVIEW", "eyebrow"))
-        cargo_layout.addWidget(_label("Payment Multipliers by Cargo Type", "section"))
+        cargo_layout.addWidget(_label(_t("CARGO PAYMENT PREVIEW"), "eyebrow"))
+        cargo_layout.addWidget(_label(_t("Payment Multipliers by Cargo Type"), "section"))
         self.cargo_custom_hint = _label(
-            "Economy is set to Custom — edit the 'Modified' column to set each cargo value independently.",
+            _t("Economy is set to Custom — edit the 'Modified' column to set each cargo value independently."),
             "warning",
         )
         self.cargo_custom_hint.setVisible(False)
         cargo_layout.addWidget(self.cargo_custom_hint)
         cargo_layout.addWidget(_label(
-            "Shows vanilla values and what they become after applying the economy multiplier.",
+            _t("Shows vanilla values and what they become after applying the economy multiplier."),
             "muted",
         ))
 
         self.cargo_table = QtWidgets.QTableWidget()
         self.cargo_table.setColumnCount(3)
-        self.cargo_table.setHorizontalHeaderLabels(["Cargo Type", "Vanilla", "Modified"])
+        self.cargo_table.setHorizontalHeaderLabels([_t("Cargo Type"), _t("Vanilla"), _t("Modified")])
         self.cargo_table.horizontalHeader().setStretchLastSection(True)
         self.cargo_table.horizontalHeader().setSectionResizeMode(
             0, QtWidgets.QHeaderView.ResizeMode.Stretch
@@ -371,10 +373,10 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         ini_layout = QtWidgets.QVBoxLayout(ini_card)
         ini_layout.setContentsMargins(20, 16, 20, 16)
         ini_layout.setSpacing(8)
-        ini_layout.addWidget(_label("INI ECONOMY PREVIEW", "eyebrow"))
-        ini_layout.addWidget(_label("DefaultMotorTownBalance.ini Values", "section"))
+        ini_layout.addWidget(_label(_t("INI ECONOMY PREVIEW"), "eyebrow"))
+        ini_layout.addWidget(_label(_t("DefaultMotorTownBalance.ini Values"), "section"))
         self.ini_custom_hint = _label(
-            "One or more categories set to Custom — edit the 'Modified' column for those rows.",
+            _t("One or more categories set to Custom — edit the 'Modified' column for those rows."),
             "warning",
         )
         self.ini_custom_hint.setVisible(False)
@@ -382,7 +384,7 @@ class EconomyEditorPanel(QtWidgets.QWidget):
 
         self.ini_table = QtWidgets.QTableWidget()
         self.ini_table.setColumnCount(4)
-        self.ini_table.setHorizontalHeaderLabels(["Setting", "Category", "Vanilla", "Modified"])
+        self.ini_table.setHorizontalHeaderLabels([_t("Setting"), _t("Category"), _t("Vanilla"), _t("Modified")])
         self.ini_table.horizontalHeader().setStretchLastSection(True)
         self.ini_table.horizontalHeader().setSectionResizeMode(
             0, QtWidgets.QHeaderView.ResizeMode.Stretch
@@ -409,18 +411,18 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         actions_layout.setContentsMargins(20, 12, 20, 12)
         actions_layout.setSpacing(12)
 
-        self.status_label = _label("No changes applied yet.", "muted")
+        self.status_label = _label(_t("No changes applied yet."), "muted")
         actions_layout.addWidget(self.status_label, 1)
 
-        self.reset_button = _action_button("Reset to Vanilla", "danger")
+        self.reset_button = _action_button(_t("Reset to Vanilla"), "danger")
         self.reset_button.clicked.connect(self._on_reset)
         actions_layout.addWidget(self.reset_button)
 
-        self.preview_button = _action_button("Preview Changes", "secondary")
+        self.preview_button = _action_button(_t("Preview Changes"), "secondary")
         self.preview_button.clicked.connect(self._on_preview)
         actions_layout.addWidget(self.preview_button)
 
-        self.apply_button = _action_button("Apply Economy Settings", "primary")
+        self.apply_button = _action_button(_t("Apply Economy Settings"), "primary")
         self.apply_button.clicked.connect(self._on_apply)
         actions_layout.addWidget(self.apply_button)
 
@@ -465,7 +467,7 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         title_col.addWidget(_label(description, "muted"))
         title_row.addLayout(title_col, 1)
 
-        custom_cb = QtWidgets.QCheckBox("Custom")
+        custom_cb = QtWidgets.QCheckBox(_t("Custom"))
         custom_cb.setStyleSheet(f"""
             QCheckBox {{
                 color: {_MUTED};
@@ -595,18 +597,18 @@ class EconomyEditorPanel(QtWidgets.QWidget):
     def _browse_unpacked_folder(self) -> None:
         """Let the user pick the Unpacked game folder."""
         folder = QtWidgets.QFileDialog.getExistingDirectory(
-            self, "Select Unpacked Motor Town Folder",
+            self, _t("Select Unpacked Motor Town Folder"),
             "", QtWidgets.QFileDialog.Option.ShowDirsOnly,
         )
         if folder:
             if eco.set_vanilla_root(folder):
                 self.vanilla_banner.setVisible(False)
-                self.status_label.setText("Unpacked files found! Economy editor is ready.")
+                self.status_label.setText(_t("Unpacked files found! Economy editor is ready."))
                 self.status_label.setStyleSheet(f"color: {_SUCCESS}; font-size: 12px; font-weight: 600;")
                 self._on_preview()
             else:
                 self.status_label.setText(
-                    "Could not find Balance.json or DefaultMotorTownBalance.ini in the selected folder."
+                    _t("Could not find Balance.json or DefaultMotorTownBalance.ini in the selected folder.")
                 )
                 self.status_label.setStyleSheet("color: #e74c3c; font-size: 12px;")
 
@@ -702,12 +704,12 @@ class EconomyEditorPanel(QtWidgets.QWidget):
     def _on_preview(self) -> None:
         """Update preview tables with current slider/checkbox selections."""
         preview_labels = {
-            'economy': 'Cargo payments',
-            'bus': 'Bus fares',
-            'taxi': 'Taxi rates',
-            'ambulance': 'Ambulance rates',
-            'fuel': 'Fuel costs',
-            'vehicle': 'Tow-to-road costs',
+            'economy': _t('Cargo payments'),
+            'bus': _t('Bus fares'),
+            'taxi': _t('Taxi rates'),
+            'ambulance': _t('Ambulance rates'),
+            'fuel': _t('Fuel costs'),
+            'vehicle': _t('Tow-to-road costs'),
         }
         mults = {}
         customs = {}
@@ -716,11 +718,11 @@ class EconomyEditorPanel(QtWidgets.QWidget):
             customs[key] = getattr(self, f'{key}_custom').isChecked()
             preview = getattr(self, f'{key}_preview')
             if customs[key]:
-                preview.setText("Custom mode \u2014 edit values in the table below")
+                preview.setText(_t("Custom mode \u2014 edit values in the table below"))
             elif abs(mults[key] - 1.0) > 0.01:
                 preview.setText(f"{preview_labels[key]} \u00d7 {mults[key]:.1f}")
             else:
-                preview.setText("No change (vanilla values)")
+                preview.setText(_t("No change (vanilla values)"))
 
         any_ini_custom = any(customs[k] for k in customs)
         self.cargo_custom_hint.setVisible(customs['economy'])
@@ -874,8 +876,8 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         # Check if vanilla paths are set before applying
         if not eco.vanilla_paths_ok():
             self.status_label.setText(
-                "Cannot apply: unpacked game files not found. "
-                "Click 'Select Unpacked Folder' above."
+                _t("Cannot apply: unpacked game files not found. "
+                "Click 'Select Unpacked Folder' above.")
             )
             self.status_label.setStyleSheet("color: #e74c3c; font-size: 12px;")
             return
@@ -887,21 +889,24 @@ class EconomyEditorPanel(QtWidgets.QWidget):
 
             def _fmt(v):
                 if v == 'custom':
-                    return 'Custom'
+                    return _t('Custom')
                 return f"\u00d7{v:.1f}"
 
             self.status_label.setText(
-                f"Applied: Economy {_fmt(mults['economy'])}, "
-                f"Bus {_fmt(mults['bus'])}, "
-                f"Taxi {_fmt(mults['taxi'])}, "
-                f"Amb {_fmt(mults['ambulance'])}, "
-                f"Fuel {_fmt(mults['fuel'])}, "
-                f"Veh {_fmt(mults['vehicle'])}"
+                _t("Applied: Economy {economy}, Bus {bus}, Taxi {taxi}, Amb {amb}, Fuel {fuel}, Veh {veh}").format(
+                    economy=_fmt(mults['economy']),
+                    bus=_fmt(mults['bus']),
+                    taxi=_fmt(mults['taxi']),
+                    amb=_fmt(mults['ambulance']),
+                    fuel=_fmt(mults['fuel']),
+                    veh=_fmt(mults['vehicle'])
+                )
             )
             self.status_label.setStyleSheet(f"color: {_SUCCESS}; font-size: 12px; font-weight: 600;")
             self.economy_applied.emit(result)
         else:
-            self.status_label.setText(f"Error applying settings: {result}")
+            error_msg = _t("Error applying settings: {error}").format(error=result)
+            self.status_label.setText(error_msg)
             self.status_label.setStyleSheet(f"color: #e74c3c; font-size: 12px;")
 
     def _collect_custom_values_from_tables(self) -> None:
@@ -958,6 +963,6 @@ class EconomyEditorPanel(QtWidgets.QWidget):
             reset_settings[f'{key}_multiplier'] = 1.0
             reset_settings[f'{key}_custom'] = False
         eco.save_economy_settings(reset_settings)
-        self.status_label.setText("Reset to vanilla values. Economy mod files removed.")
+        self.status_label.setText(_t("Reset to vanilla values. Economy mod files removed."))
         self.status_label.setStyleSheet(f"color: {_WARNING}; font-size: 12px;")
         self._on_preview()

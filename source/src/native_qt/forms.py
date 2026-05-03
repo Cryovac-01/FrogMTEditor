@@ -7,6 +7,7 @@ from . import field_bounds as _fb
 from . import field_validator as _fv
 from .curve_preview import InlineCurvePreview as _InlineCurvePreview
 from .tire_charts import InlineTireCharts as _InlineTireCharts
+from i18n import _ as _t
 
 # Vehicle type choices for engine creation.
 # Each entry: (display_label, donor_row_name).
@@ -160,7 +161,7 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(8)
 
-        self.unlock_default_checkbox = QtWidgets.QCheckBox("Unlock by default")
+        self.unlock_default_checkbox = QtWidgets.QCheckBox(_t("Unlock by default"))
         self.unlock_default_checkbox.setToolTip(
             "When checked, the engine has no level requirements and is "
             "available to the player from Driver level 1."
@@ -176,7 +177,7 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
         self._rows_layout.setSpacing(6)
         outer.addWidget(self._rows_container)
 
-        self.add_condition_button = QtWidgets.QPushButton("+ Add condition")
+        self.add_condition_button = QtWidgets.QPushButton(_t("+ Add condition"))
         self.add_condition_button.setToolTip(
             "Add another (Category, Level) requirement. Engine unlocks "
             "only when ALL listed requirements are met."
@@ -230,7 +231,7 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
         category_combo.setMinimumWidth(140)
         category_combo.currentIndexChanged.connect(self.changed.emit)
 
-        level_label = QtWidgets.QLabel("Level")
+        level_label = QtWidgets.QLabel(_t("Level"))
         set_label_kind(level_label, "subtle")
 
         level_input = QtWidgets.QLineEdit(str(int(level)))
@@ -242,7 +243,7 @@ class LevelRequirementsWidget(QtWidgets.QWidget):
         remove_button = QtWidgets.QPushButton()
         remove_button.setIcon(self._render_remove_icon(14))
         remove_button.setIconSize(QtCore.QSize(14, 14))
-        remove_button.setToolTip("Remove this requirement")
+        remove_button.setToolTip(_t("Remove this requirement"))
         remove_button.setFixedSize(28, 28)
         remove_button.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         remove_button.clicked.connect(lambda _checked=False, w=row_widget: self._remove_row(w))
@@ -748,7 +749,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.shop_kinds[key] = kind
 
     def _add_sound_entry(self, form: QtWidgets.QFormLayout, value: str) -> None:
-        label = QtWidgets.QLabel("Sound Pack")
+        label = QtWidgets.QLabel(_t("Sound Pack"))
         set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
         combo = ArrowComboBox()
         configure_field_control(combo, "editor")
@@ -762,7 +763,7 @@ class PartEditorForm(QtWidgets.QWidget):
 
     def _add_vehicle_type_entry(self, form: QtWidgets.QFormLayout, current_value: str = '') -> None:
         """Add a Vehicle Type dropdown for engine creation."""
-        label = QtWidgets.QLabel("Vehicle Type")
+        label = QtWidgets.QLabel(_t("Vehicle Type"))
         set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
         combo = ArrowComboBox()
         configure_field_control(combo, "editor")
@@ -785,7 +786,7 @@ class PartEditorForm(QtWidgets.QWidget):
         """Add the Engine Unlock Requirements section to the engine
         creator form. The widget exposes a checkbox for "unlock by
         default" plus a dynamic list of (Category, Level) pairs."""
-        label = QtWidgets.QLabel("Engine Unlock Requirements")
+        label = QtWidgets.QLabel(_t("Engine Unlock Requirements"))
         set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
         widget = LevelRequirementsWidget(self)
         widget.from_payload(saved or None)
@@ -803,7 +804,7 @@ class PartEditorForm(QtWidgets.QWidget):
         The slider is for compensating sound-pack/engine class
         mismatches — e.g. a truck sound pack on a sports car engine
         plays too quietly, so the user nudges this slider up."""
-        label = QtWidgets.QLabel("Volume Adjustment")
+        label = QtWidgets.QLabel(_t("Volume Adjustment"))
         set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
         widget = VolumeOffsetWidget(self)
         widget.from_payload(saved)
@@ -821,7 +822,7 @@ class PartEditorForm(QtWidgets.QWidget):
         over the donor-derived default. When the user changes the
         selection, EV-only property rows are shown / hidden so the
         form only exposes fields that apply to the chosen fuel type."""
-        label = QtWidgets.QLabel("Fuel Type")
+        label = QtWidgets.QLabel(_t("Fuel Type"))
         set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
         combo = ArrowComboBox()
         configure_field_control(combo, "editor")
@@ -953,7 +954,7 @@ class PartEditorForm(QtWidgets.QWidget):
         AND the legacy single-string ``vehicle_type`` so old
         ``.creation.json`` sidecars round-trip cleanly.
         """
-        label = QtWidgets.QLabel("Vehicle Compatibility")
+        label = QtWidgets.QLabel(_t("Vehicle Compatibility"))
         set_label_kind(label, "fieldLabel" if self.creator_mode else "muted")
         widget = TireVehicleClassesWidget(self)
         widget.from_payload(current_value)
@@ -977,7 +978,7 @@ class PartEditorForm(QtWidgets.QWidget):
         configure_field_control(line, "editor")
         line.setReadOnly(readonly)
         if readonly and prop.get("missing"):
-            line.setPlaceholderText("Not serialized on this layout")
+            line.setPlaceholderText(_t("Not serialized on this layout"))
         self._connect_widget(line)
         self.property_widgets[key] = line
         self.prop_meta[key] = {
@@ -1018,20 +1019,20 @@ class PartEditorForm(QtWidgets.QWidget):
             field_layout.setContentsMargins(0, 0, 0, 0)
             field_layout.setSpacing(8)
             if is_torque_row:
-                name_label.setText("Max Torque")
+                name_label.setText(_t("Max Torque"))
                 field_layout.addWidget(line, 1)
                 if unit:
                     unit_label = QtWidgets.QLabel(unit)
                     set_label_kind(unit_label, "subtle")
                     unit_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
                     field_layout.addWidget(unit_label, 0)
-                at_label = QtWidgets.QLabel("@")
+                at_label = QtWidgets.QLabel(_t("@"))
                 set_label_kind(at_label, "subtle")
                 at_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
                 field_layout.addWidget(at_label, 0)
                 self.peak_torque_rpm_input = QtWidgets.QLineEdit()
                 configure_field_control(self.peak_torque_rpm_input, "editor")
-                self.peak_torque_rpm_input.setPlaceholderText("RPM")
+                self.peak_torque_rpm_input.setPlaceholderText(_t("RPM"))
                 self.peak_torque_rpm_input.setMaximumWidth(100)
                 # Bounds for the synthetic peak-torque-RPM input. The
                 # hint label is the row's `helper_layout` below, but
@@ -1045,7 +1046,7 @@ class PartEditorForm(QtWidgets.QWidget):
                     _hidden_hint.setVisible(False)
                     _fv.attach(self.peak_torque_rpm_input, _ptrb, _hidden_hint)
                 field_layout.addWidget(self.peak_torque_rpm_input, 0)
-                ptr_unit = QtWidgets.QLabel("RPM")
+                ptr_unit = QtWidgets.QLabel(_t("RPM"))
                 set_label_kind(ptr_unit, "subtle")
                 ptr_unit.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
                 field_layout.addWidget(ptr_unit, 0)
@@ -1106,7 +1107,7 @@ class PartEditorForm(QtWidgets.QWidget):
                 hp_top = QtWidgets.QHBoxLayout()
                 hp_top.setContentsMargins(0, 0, 0, 0)
                 hp_top.setSpacing(12)
-                hp_name = QtWidgets.QLabel("Max HP")
+                hp_name = QtWidgets.QLabel(_t("Max HP"))
                 set_label_kind(hp_name, "fieldLabel")
                 hp_name.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop)
                 hp_name.setFixedWidth(CREATOR_LABEL_WIDTH)
@@ -1117,7 +1118,7 @@ class PartEditorForm(QtWidgets.QWidget):
                 hp_field_layout.setSpacing(8)
                 self.max_hp_input = QtWidgets.QLineEdit()
                 configure_field_control(self.max_hp_input, "editor")
-                self.max_hp_input.setPlaceholderText("HP")
+                self.max_hp_input.setPlaceholderText(_t("HP"))
                 _hpb = _fb.lookup('max_hp', 'creator_input')
                 if _hpb is not None:
                     self.max_hp_input.setToolTip(_hpb.format_tooltip())
@@ -1125,17 +1126,17 @@ class PartEditorForm(QtWidgets.QWidget):
                     _hidden_hp_hint.setVisible(False)
                     _fv.attach(self.max_hp_input, _hpb, _hidden_hp_hint)
                 hp_field_layout.addWidget(self.max_hp_input, 1)
-                hp_unit = QtWidgets.QLabel("HP")
+                hp_unit = QtWidgets.QLabel(_t("HP"))
                 set_label_kind(hp_unit, "subtle")
                 hp_unit.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
                 hp_field_layout.addWidget(hp_unit, 0)
-                at_label2 = QtWidgets.QLabel("@")
+                at_label2 = QtWidgets.QLabel(_t("@"))
                 set_label_kind(at_label2, "subtle")
                 at_label2.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
                 hp_field_layout.addWidget(at_label2, 0)
                 self.peak_hp_rpm_input = QtWidgets.QLineEdit()
                 configure_field_control(self.peak_hp_rpm_input, "editor")
-                self.peak_hp_rpm_input.setPlaceholderText("RPM")
+                self.peak_hp_rpm_input.setPlaceholderText(_t("RPM"))
                 self.peak_hp_rpm_input.setMaximumWidth(100)
                 _phrb = _fb.lookup('peak_hp_rpm', 'creator_input')
                 if _phrb is not None:
@@ -1144,7 +1145,7 @@ class PartEditorForm(QtWidgets.QWidget):
                     _hidden_phr_hint.setVisible(False)
                     _fv.attach(self.peak_hp_rpm_input, _phrb, _hidden_phr_hint)
                 hp_field_layout.addWidget(self.peak_hp_rpm_input, 0)
-                hp_rpm_unit = QtWidgets.QLabel("RPM")
+                hp_rpm_unit = QtWidgets.QLabel(_t("RPM"))
                 set_label_kind(hp_rpm_unit, "subtle")
                 hp_rpm_unit.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
                 hp_field_layout.addWidget(hp_rpm_unit, 0)
