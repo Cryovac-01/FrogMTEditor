@@ -6,6 +6,7 @@ from typing import Tuple  # not re-exported by `from .theme import *`
 from . import field_bounds as _fb
 from . import field_validator as _fv
 from .curve_preview import InlineCurvePreview as _InlineCurvePreview
+from .tire_charts import InlineTireCharts as _InlineTireCharts
 
 # Vehicle type choices for engine creation.
 # Each entry: (display_label, donor_row_name).
@@ -583,6 +584,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.original_volume_offset: Optional[int] = None
         self.curve_preview: Optional[_InlineCurvePreview] = None
         self.tire_vehicle_classes_widget: Optional[TireVehicleClassesWidget] = None
+        self.tire_charts: Optional[_InlineTireCharts] = None
         # Row-wrapper widgets keyed by property name. Used to hide /
         # show whole rows (label + input + helper text) dynamically
         # in response to the Fuel Type combo, e.g. EV-only properties
@@ -649,6 +651,7 @@ class PartEditorForm(QtWidgets.QWidget):
         self.original_volume_offset = None
         self.curve_preview = None
         self.tire_vehicle_classes_widget = None
+        self.tire_charts = None
         self.property_row_widgets = {}
         self._previous_fuel_type = ""
         self._suppress_fuel_handler = False
@@ -1312,6 +1315,17 @@ class PartEditorForm(QtWidgets.QWidget):
             curve_card_layout.addWidget(self.curve_preview)
             self.content_layout.addWidget(curve_card)
 
+        # Inline tire analysis charts — five panels (temperature,
+        # load, slip, wear, stiffness) under the property cards.
+        # Refreshes whenever any tire property field changes.
+        if self.creator_mode and self.part_type == "tire":
+            tire_card, tire_card_layout = build_creator_grid_card(
+                self._display_section_title("Tire Analysis")
+            )
+            self.tire_charts = _InlineTireCharts(tire_card)
+            tire_card_layout.addWidget(self.tire_charts)
+            self.content_layout.addWidget(tire_card)
+
         if not self.creator_mode:
             self.content_layout.addStretch(1)
 
@@ -1351,6 +1365,10 @@ class PartEditorForm(QtWidgets.QWidget):
         # for the user to type.
         self._refresh_rpm_curve_visuals()
         self._refresh_curve_preview()
+        # Tire analysis charts: hook textChanged on every property
+        # widget so any edit live-refreshes the panels.
+        self._wire_tire_charts_listeners()
+        self._refresh_tire_charts()
 
     def has_changes(self) -> bool:
         return bool(self.get_changed_payload())
@@ -1485,6 +1503,33 @@ class PartEditorForm(QtWidgets.QWidget):
                 )
             except Exception:
                 pass
+
+    def _wire_tire_charts_listeners(self) -> None:
+        """Subscribe the tire analysis charts to every tire property
+        textChanged so edits trigger a live re-render. No-op when the
+        chart panel doesn't exist (engine forms, non-creator mode)."""
+        if self.tire_charts is None:
+            return
+        for widget in self.property_widgets.values():
+            try:
+                widget.textChanged.connect(
+                    lambda _t='', s=self: s._refresh_tire_charts()
+                )
+            except Exception:
+                pass
+
+    def _refresh_tire_charts(self) -> None:
+        """Re-render every tire chart panel from the form's current
+        property snapshot (so unsaved edits are reflected immediately)."""
+        if self.tire_charts is None or not self.part:
+            return
+        try:
+            overrides = self.get_current_property_strings()
+            self.tire_charts.refresh(self.part, overrides)
+        except Exception:
+            # Charts are non-critical — failures shouldn't surface to
+            # the user as a form error.
+            pass
 
     def _refresh_curve_preview(self) -> None:
         """Pull the five live values out of their widgets and re-render

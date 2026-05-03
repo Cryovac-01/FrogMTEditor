@@ -754,37 +754,70 @@ class CreatorWorkspace(QtWidgets.QWidget):
             return
 
         coverage = get_tire_field_coverage(self.current_detail)
-        grip = self.form.get_tire_grip_g()
+        # Pull street + offroad grip and the heuristic archetype from
+        # the analysis module. We pass the form's live property strings
+        # as overrides so unsaved edits are reflected immediately.
+        from tire_analysis import estimate_grip, classify_archetype
+        live_props = self.form.get_current_property_strings() if self.form else {}
+        grip_info = estimate_grip(self.current_detail or {}, live_props)
+        archetype = classify_archetype(self.current_detail or {}, live_props)
+
         summary_parts = []
         details = []
-        if grip is not None:
-            summary_parts.append(f"{format_compact_metric(grip)} G grip")
-            details.append(f"Estimated grip: {format_number(grip)} G")
-            # Explain the grip formula so the user can predict how
-            # their edits will move the number. This is the same
-            # formula `estimate_tire_grip_g` uses in native_services.
+        if grip_info.get('street_g') is not None:
+            street = grip_info['street_g']
+            offroad = grip_info['offroad_g']
+            summary_parts.append(f"{format_compact_metric(street)} G street")
+            if offroad is not None and abs(offroad - street) > 0.01:
+                summary_parts.append(f"{format_compact_metric(offroad)} G offroad")
+            details.append(f"Estimated street grip:  {format_number(street)} G")
+            if offroad is not None:
+                details.append(f"Estimated offroad grip: {format_number(offroad)} G")
+            details.append("")
+            details.append("Formula:")
+            details.append(
+                "  Street  G  =  Cornering Stiffness  +  (Camber Stiffness ÷ 2)"
+            )
+            details.append(
+                "  Offroad G  =  Street G  ×  (1  +  GripMultiplier ÷ 100)"
+            )
+            details.append("")
+            details.append("Worked example for this tire:")
+            for line in (grip_info.get('formula') or '').splitlines():
+                if line.strip():
+                    details.append(f"  {line}")
             details.append("")
             details.append(
-                "Formula:  Estimated G  =  Cornering Stiffness  +  "
-                "(Camber Stiffness ÷ 2)"
-            )
-            details.append(
-                "Example:  CorneringStiffness = 0.85, CamberStiffness = "
-                "0.30 → 0.85 + 0.15 = 1.00 G"
-            )
-            details.append(
                 "Camber Stiffness counts at half weight because it only "
-                "kicks in when the wheel is actively cambered into a "
-                "corner. Tires that don't expose Camber Stiffness on "
-                "their layout treat it as 0 — the estimate is just "
-                "Cornering Stiffness on its own."
+                "kicks in when the wheel is cambered into a corner. "
+                "Tires that don't expose Camber Stiffness on their "
+                "layout treat it as 0."
             )
             details.append(
-                "Note: this is the editor's quick estimate, not the "
-                "exact in-game peak. Real grip also depends on load, "
-                "temperature, surface, and the tire's slip-stiffness "
-                "fields, which the simple formula doesn't model."
+                "These are quick estimates — the real in-game peak also "
+                "depends on load, temperature, surface, and the slip-"
+                "stiffness fields, which a single scalar can't capture."
             )
+
+        # Use-case recommendation block.
+        if archetype.get('primary_label'):
+            details.append("")
+            confidence_pct = int(round(archetype['confidence'] * 100))
+            primary = archetype['primary_label']
+            secondary = archetype.get('secondary_label')
+            line = f"Recommended use:  {primary}  (confidence ~{confidence_pct}%)"
+            if secondary:
+                line += f"\n                  also fits: {secondary}"
+            details.append(line)
+            if archetype.get('primary_reasons'):
+                details.append("Why:")
+                for reason in archetype['primary_reasons'][:6]:
+                    details.append(f"  • {reason}")
+            details.append(
+                "(Heuristic — based on stiffness / load / wear values vs "
+                "vanilla MT tire patterns. Not from any documented spec.)"
+            )
+
         # Coverage count is included in the compact summary at the top
         # but no longer rebroadcast in the details body — the row
         # count and the missing-field list were noise. The fields
