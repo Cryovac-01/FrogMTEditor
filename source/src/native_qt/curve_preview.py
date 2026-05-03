@@ -194,15 +194,18 @@ def synth_curve(max_rpm: float,
 # Inline preview widget (Qt)
 # ──────────────────────────────────────────────────────────────────────
 
-# Visual constants — keep close to the existing CurveChartCard palette
-# so the inline preview feels native to the editor's existing chart
-# tab. We don't reach into theme here because the chart subsystem
-# uses QColor objects and the theme exports Qt color tokens already.
-_TORQUE_COLOR  = QtGui.QColor("#73c686")   # green — matches editor's accent
-_HP_COLOR      = QtGui.QColor("#5fa9d9")   # blue
-_GRID_COLOR    = QtGui.QColor("#314153")
-_TEXT_COLOR    = QtGui.QColor("#9da7b0")
-_BG_COLOR      = QtGui.QColor("#0c1622")
+# Visual constants — pulled from the central theme_palette so they
+# track the active dark / light / high-contrast theme. Helper getters
+# resolve the palette at call time, not at import time, so a theme
+# switch is reflected on the next refresh().
+from . import theme_palette as _palette
+
+
+def _torque_color():  return _palette.qcolor('chart_torque')
+def _hp_color():      return _palette.qcolor('chart_hp')
+def _grid_color():    return _palette.qcolor('chart_grid')
+def _text_color():    return _palette.qcolor('chart_text')
+def _bg_color():      return _palette.qcolor('chart_bg')
 
 
 class InlineCurvePreview(QtWidgets.QWidget):
@@ -225,19 +228,19 @@ class InlineCurvePreview(QtWidgets.QWidget):
         layout.setSpacing(2)
 
         self._chart = QtCharts.QChart()
-        self._chart.setBackgroundBrush(QtGui.QBrush(_BG_COLOR))
+        self._chart.setBackgroundBrush(QtGui.QBrush(_bg_color()))
         self._chart.setBackgroundRoundness(0)
         self._chart.setMargins(QtCore.QMargins(0, 0, 0, 0))
         self._chart.legend().setVisible(True)
-        self._chart.legend().setLabelColor(_TEXT_COLOR)
+        self._chart.legend().setLabelColor(_text_color())
         self._chart.legend().setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
         self._chart.setTitle("")
 
         self._chart_view = QtCharts.QChartView(self._chart)
         self._chart_view.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        self._chart_view.setBackgroundBrush(QtGui.QBrush(_BG_COLOR))
+        self._chart_view.setBackgroundBrush(QtGui.QBrush(_bg_color()))
         self._chart_view.setStyleSheet(
-            f"background-color: {_BG_COLOR.name()}; border: 1px solid {_GRID_COLOR.name()};"
+            f"background-color: {_bg_color().name()}; border: 1px solid {_grid_color().name()};"
         )
         layout.addWidget(self._chart_view, 1)
 
@@ -246,7 +249,7 @@ class InlineCurvePreview(QtWidgets.QWidget):
         # entirely (we keep the last-good preview visible).
         self._status_label = QtWidgets.QLabel("")
         self._status_label.setStyleSheet(
-            f"color: {_TEXT_COLOR.name()}; font-size: 11px;"
+            f"color: {_text_color().name()}; font-size: 11px;"
         )
         self._status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self._status_label, 0)
@@ -254,6 +257,37 @@ class InlineCurvePreview(QtWidgets.QWidget):
         # Initial empty state so the chart object exists and refresh()
         # can update it without doing first-time setup work each call.
         self._render_empty("Enter MaxTorque, MaxRPM, and Max HP to see a preview.")
+
+        # Re-render on theme change so chart colours track the
+        # active palette. Stash the last refresh() args so we can
+        # re-apply them with new palette colours; falls back to
+        # the empty state when nothing's been rendered yet.
+        self._last_refresh_args = None
+        _palette.register_listener(self._on_theme_changed)
+
+    def _on_theme_changed(self) -> None:
+        """Re-render with the new palette colours. Called by the
+        theme_palette listener registry on theme switch."""
+        # Restyle the chart container immediately
+        try:
+            self._chart.setBackgroundBrush(QtGui.QBrush(_bg_color()))
+            self._chart.legend().setLabelColor(_text_color())
+            self._chart_view.setBackgroundBrush(QtGui.QBrush(_bg_color()))
+            self._chart_view.setStyleSheet(
+                f"background-color: {_bg_color().name()}; "
+                f"border: 1px solid {_grid_color().name()};"
+            )
+            self._status_label.setStyleSheet(
+                f"color: {_text_color().name()}; font-size: 11px;"
+            )
+        except Exception:
+            pass
+        # Re-run the last refresh so series + axes get the new colours.
+        if self._last_refresh_args:
+            try:
+                self.refresh(*self._last_refresh_args)
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     def refresh(self,
@@ -265,6 +299,9 @@ class InlineCurvePreview(QtWidgets.QWidget):
         """Recompute and redraw the curve. Pass ``None`` for any value
         that's unparseable so the widget can fall back to an
         informative empty state instead of plotting nonsense."""
+        # Stash for theme-change re-render
+        self._last_refresh_args = (max_rpm, max_torque_nm, peak_torque_rpm,
+                                   max_hp, peak_hp_rpm)
         # Need at least MaxRPM + MaxTorque to draw anything.
         if not max_rpm or not max_torque_nm or max_rpm <= 0 or max_torque_nm <= 0:
             self._render_empty(
@@ -301,7 +338,7 @@ class InlineCurvePreview(QtWidgets.QWidget):
         self._clear_series()
         self._status_label.setText(message)
         self._status_label.setStyleSheet(
-            f"color: {_TEXT_COLOR.name()}; font-size: 11px;"
+            f"color: {_text_color().name()}; font-size: 11px;"
         )
 
     def _render_curve(self,
@@ -322,7 +359,7 @@ class InlineCurvePreview(QtWidgets.QWidget):
         # Torque series on the left axis.
         torque_series = QtCharts.QSplineSeries()
         torque_series.setName("Torque (Nm)")
-        torque_pen = QtGui.QPen(_TORQUE_COLOR)
+        torque_pen = QtGui.QPen(_torque_color())
         torque_pen.setWidth(2)
         torque_pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
         torque_series.setPen(torque_pen)
@@ -332,7 +369,7 @@ class InlineCurvePreview(QtWidgets.QWidget):
         # HP series on the right axis.
         hp_series = QtCharts.QSplineSeries()
         hp_series.setName("HP")
-        hp_pen = QtGui.QPen(_HP_COLOR)
+        hp_pen = QtGui.QPen(_hp_color())
         hp_pen.setWidth(2)
         hp_pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
         hp_series.setPen(hp_pen)
@@ -347,10 +384,10 @@ class InlineCurvePreview(QtWidgets.QWidget):
         axis_x.setRange(0.0, float(max_rpm))
         axis_x.setLabelFormat("%.0f")
         axis_x.setTitleText("RPM")
-        axis_x.setTitleBrush(QtGui.QBrush(_TEXT_COLOR))
-        axis_x.setLabelsBrush(QtGui.QBrush(_TEXT_COLOR))
-        axis_x.setGridLineColor(_GRID_COLOR)
-        axis_x.setLinePenColor(_GRID_COLOR)
+        axis_x.setTitleBrush(QtGui.QBrush(_text_color()))
+        axis_x.setLabelsBrush(QtGui.QBrush(_text_color()))
+        axis_x.setGridLineColor(_grid_color())
+        axis_x.setLinePenColor(_grid_color())
         axis_x.setTickCount(6)
 
         # Left Y axis — torque in Nm. Ranges to MaxTorque + 10% headroom.
@@ -358,10 +395,10 @@ class InlineCurvePreview(QtWidgets.QWidget):
         axis_torque.setRange(0.0, max_torque_nm * 1.1)
         axis_torque.setLabelFormat("%.0f")
         axis_torque.setTitleText("Nm")
-        axis_torque.setTitleBrush(QtGui.QBrush(_TORQUE_COLOR))
-        axis_torque.setLabelsBrush(QtGui.QBrush(_TORQUE_COLOR))
-        axis_torque.setGridLineColor(_GRID_COLOR)
-        axis_torque.setLinePenColor(_TORQUE_COLOR)
+        axis_torque.setTitleBrush(QtGui.QBrush(_torque_color()))
+        axis_torque.setLabelsBrush(QtGui.QBrush(_torque_color()))
+        axis_torque.setGridLineColor(_grid_color())
+        axis_torque.setLinePenColor(_torque_color())
         axis_torque.setTickCount(5)
 
         # Right Y axis — HP. Ranges to peak HP + 10% headroom (the
@@ -371,10 +408,10 @@ class InlineCurvePreview(QtWidgets.QWidget):
         axis_hp.setRange(0.0, max(1.0, peak_hp_value * 1.1))
         axis_hp.setLabelFormat("%.0f")
         axis_hp.setTitleText("HP")
-        axis_hp.setTitleBrush(QtGui.QBrush(_HP_COLOR))
-        axis_hp.setLabelsBrush(QtGui.QBrush(_HP_COLOR))
-        axis_hp.setGridLineColor(_GRID_COLOR)
-        axis_hp.setLinePenColor(_HP_COLOR)
+        axis_hp.setTitleBrush(QtGui.QBrush(_hp_color()))
+        axis_hp.setLabelsBrush(QtGui.QBrush(_hp_color()))
+        axis_hp.setGridLineColor(_grid_color())
+        axis_hp.setLinePenColor(_hp_color())
         axis_hp.setTickCount(5)
 
         self._chart.addAxis(axis_x, QtCore.Qt.AlignmentFlag.AlignBottom)
@@ -402,5 +439,5 @@ class InlineCurvePreview(QtWidgets.QWidget):
             f"{achieved_hp:.0f} HP @ ~{int(peak_hp_rpm)} rpm{hp_match_note}"
         )
         self._status_label.setStyleSheet(
-            f"color: {_TEXT_COLOR.name()}; font-size: 11px;"
+            f"color: {_text_color().name()}; font-size: 11px;"
         )

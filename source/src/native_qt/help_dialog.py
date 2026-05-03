@@ -23,11 +23,14 @@ from typing import Any, Dict, List, Optional
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from help_content import get_topic
+from . import theme_palette as _palette
 
 
-# Visual constants — match the editor theme. We don't reach into
-# theme.py because the dialog is a self-contained popup; keeping
-# its palette local avoids tight coupling.
+# Visual constants resolved at call time from the central palette so
+# the dialog re-themes correctly when the user switches between dark
+# / light / high-contrast via File > Customize. Constants below kept
+# only for backward-compat with the static QSS — the live dialog
+# rebuilds its stylesheet from the palette.
 _BG          = "#0c1622"
 _BG_PANEL    = "#13202f"
 _BORDER      = "#314153"
@@ -128,7 +131,14 @@ class HelpDialog(QtWidgets.QDialog):
         self._sections: List[Dict[str, Any]] = list(self._topic.get('sections') or [])
 
         self.setWindowTitle(f"Help — {self._topic.get('title', 'Frog Mod Editor')}")
-        self.setStyleSheet(_DIALOG_QSS)
+        # Build QSS from the active palette so the popup follows the
+        # current theme (dark / light / high-contrast). Falls back to
+        # the static _DIALOG_QSS only if the palette module is
+        # unavailable for some reason.
+        try:
+            self.setStyleSheet(_palette.build_dialog_qss())
+        except Exception:
+            self.setStyleSheet(_DIALOG_QSS)
         self.resize(1100, 720)
 
         self._build_ui()

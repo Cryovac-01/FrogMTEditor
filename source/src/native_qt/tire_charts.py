@@ -35,23 +35,29 @@ from PySide6 import QtCharts, QtCore, QtGui, QtWidgets
 import tire_analysis as _ta
 
 
-# ── Palette — picked to match the existing curve_preview accent set ──
-_STREET_COLOR = QtGui.QColor("#73c686")    # green
-_OFFROAD_COLOR = QtGui.QColor("#d9a13a")   # gold
-_PRIMARY_COLOR = QtGui.QColor("#5fa9d9")   # blue
-_GRID_COLOR    = QtGui.QColor("#314153")
-_TEXT_COLOR    = QtGui.QColor("#9da7b0")
-_BG_COLOR      = QtGui.QColor("#0c1622")
+# ── Palette — pulled from the central theme_palette so the chart
+# colours track the active dark / light / high-contrast theme. Helper
+# getters resolve at call time, not import time, so a theme switch
+# is reflected on the next refresh().
+from . import theme_palette as _palette
+
+
+def _street_color():  return _palette.qcolor('chart_street')
+def _offroad_color(): return _palette.qcolor('chart_offroad')
+def _primary_color(): return _palette.qcolor('chart_primary')
+def _grid_color():    return _palette.qcolor('chart_grid')
+def _text_color():    return _palette.qcolor('chart_text')
+def _bg_color():      return _palette.qcolor('chart_bg')
 
 
 def _new_chart(title: str = "") -> QtCharts.QChart:
     """Build a chart pre-styled to match the editor theme."""
     chart = QtCharts.QChart()
-    chart.setBackgroundBrush(QtGui.QBrush(_BG_COLOR))
+    chart.setBackgroundBrush(QtGui.QBrush(_bg_color()))
     chart.setBackgroundRoundness(0)
     chart.setMargins(QtCore.QMargins(0, 0, 0, 0))
     chart.legend().setVisible(True)
-    chart.legend().setLabelColor(_TEXT_COLOR)
+    chart.legend().setLabelColor(_text_color())
     chart.legend().setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
     chart.setTitle(title)
     return chart
@@ -60,21 +66,27 @@ def _new_chart(title: str = "") -> QtCharts.QChart:
 def _new_view(chart: QtCharts.QChart) -> QtCharts.QChartView:
     view = QtCharts.QChartView(chart)
     view.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-    view.setBackgroundBrush(QtGui.QBrush(_BG_COLOR))
+    view.setBackgroundBrush(QtGui.QBrush(_bg_color()))
     view.setStyleSheet(
-        f"background-color: {_BG_COLOR.name()}; "
-        f"border: 1px solid {_GRID_COLOR.name()};"
+        f"background-color: {_bg_color().name()}; "
+        f"border: 1px solid {_grid_color().name()};"
     )
     return view
 
 
-def _make_axis(title: str = "", colour: QtGui.QColor = _TEXT_COLOR,
+def _make_axis(title: str = "", colour: Optional[QtGui.QColor] = None,
                label_format: str = "%.0f") -> QtCharts.QValueAxis:
+    # Resolve `colour` at call time (not at module-load time) so a
+    # theme switch is reflected on the next render. Default-arg
+    # values are evaluated ONCE at function definition, which would
+    # bake in whatever palette was active at import time.
+    if colour is None:
+        colour = _text_color()
     axis = QtCharts.QValueAxis()
     axis.setLabelFormat(label_format)
     axis.setLabelsBrush(QtGui.QBrush(colour))
-    axis.setGridLineColor(_GRID_COLOR)
-    axis.setLinePenColor(_GRID_COLOR)
+    axis.setGridLineColor(_grid_color())
+    axis.setLinePenColor(_grid_color())
     axis.setTickCount(5)
     if title:
         axis.setTitleText(title)
@@ -86,7 +98,7 @@ def _new_caption(text: str) -> QtWidgets.QLabel:
     """Tiny gray caption label for chart subtitles / disclaimers."""
     label = QtWidgets.QLabel(text)
     label.setWordWrap(True)
-    label.setStyleSheet(f"color: {_TEXT_COLOR.name()}; font-size: 10px;")
+    label.setStyleSheet(f"color: {_text_color().name()}; font-size: 10px;")
     return label
 
 
@@ -173,12 +185,53 @@ class InlineTireCharts(QtWidgets.QWidget):
 
         outer.addStretch(1)
 
+        # Stash the most-recent refresh args so the theme-change
+        # listener can re-render with the new palette.
+        self._last_refresh_args: Optional[tuple] = None
+        _palette.register_listener(self._on_theme_changed)
+
+    # ------------------------------------------------------------------
+    def _on_theme_changed(self) -> None:
+        """Re-render with the new palette colours. Restyles chart
+        backgrounds + captions immediately, then re-runs the last
+        refresh so series + axes get the new colours too."""
+        try:
+            for chart, view in (
+                (self._temp_chart, self._temp_view),
+                (self._load_chart, self._load_view),
+                (self._slip_chart, self._slip_view),
+                (self._wear_chart, self._wear_view),
+            ):
+                chart.setBackgroundBrush(QtGui.QBrush(_bg_color()))
+                chart.legend().setLabelColor(_text_color())
+                view.setBackgroundBrush(QtGui.QBrush(_bg_color()))
+                view.setStyleSheet(
+                    f"background-color: {_bg_color().name()}; "
+                    f"border: 1px solid {_grid_color().name()};"
+                )
+            for caption in (self._temp_caption, self._load_caption,
+                            self._slip_caption, self._wear_caption,
+                            self._stiff_caption):
+                caption.setStyleSheet(
+                    f"color: {_text_color().name()}; font-size: 10px;"
+                )
+            self._stiff_panel.refresh_theme()
+        except Exception:
+            pass
+        if self._last_refresh_args:
+            try:
+                self.refresh(*self._last_refresh_args)
+            except Exception:
+                pass
+
     # ------------------------------------------------------------------
     def refresh(self, part: Optional[Dict[str, Any]] = None,
                 overrides: Optional[Dict[str, Any]] = None) -> None:
         """Recompute every panel from the current (part, overrides)
         snapshot. Safe to call with part=None — all panels render an
         empty state."""
+        # Stash for theme-change re-render
+        self._last_refresh_args = (part, overrides)
         if not part:
             self._render_empty()
             return
@@ -213,11 +266,11 @@ class InlineTireCharts(QtWidgets.QWidget):
             return
         street = QtCharts.QSplineSeries()
         street.setName("Street grip (G)")
-        pen_s = QtGui.QPen(_STREET_COLOR); pen_s.setWidth(2)
+        pen_s = QtGui.QPen(_street_color()); pen_s.setWidth(2)
         street.setPen(pen_s)
         offroad = QtCharts.QSplineSeries()
         offroad.setName("Offroad grip (G)")
-        pen_o = QtGui.QPen(_OFFROAD_COLOR); pen_o.setWidth(2)
+        pen_o = QtGui.QPen(_offroad_color()); pen_o.setWidth(2)
         offroad.setPen(pen_o)
         for t, s, o in points:
             street.append(t, s)
@@ -242,13 +295,13 @@ class InlineTireCharts(QtWidgets.QWidget):
             return
         series = QtCharts.QLineSeries()
         series.setName("Grip factor")
-        pen = QtGui.QPen(_PRIMARY_COLOR); pen.setWidth(2)
+        pen = QtGui.QPen(_primary_color()); pen.setWidth(2)
         series.setPen(pen)
         scatter = QtCharts.QScatterSeries()
         scatter.setMarkerShape(QtCharts.QScatterSeries.MarkerShape.MarkerShapeCircle)
         scatter.setMarkerSize(8.0)
-        scatter.setColor(_PRIMARY_COLOR)
-        scatter.setBorderColor(_PRIMARY_COLOR)
+        scatter.setColor(_primary_color())
+        scatter.setBorderColor(_primary_color())
         scatter.setName("samples")
         for load, factor in points:
             series.append(load, factor)
@@ -273,7 +326,7 @@ class InlineTireCharts(QtWidgets.QWidget):
             return
         series = QtCharts.QSplineSeries()
         series.setName("Lateral force (relative)")
-        pen = QtGui.QPen(_STREET_COLOR); pen.setWidth(2)
+        pen = QtGui.QPen(_street_color()); pen.setWidth(2)
         series.setPen(pen)
         for d, f in points:
             series.append(d, f)
@@ -295,7 +348,7 @@ class InlineTireCharts(QtWidgets.QWidget):
             return
         series = QtCharts.QLineSeries()
         series.setName("Tread remaining (%)")
-        pen = QtGui.QPen(_OFFROAD_COLOR); pen.setWidth(2)
+        pen = QtGui.QPen(_offroad_color()); pen.setWidth(2)
         series.setPen(pen)
         for km, pct in points:
             series.append(km, pct)
@@ -326,12 +379,22 @@ class _StiffnessProfilePanel(QtWidgets.QWidget):
         super().__init__(parent)
         self._profile: List[tuple] = []  # list of (label, raw, norm_0_1)
         self.setStyleSheet(
-            f"background-color: {_BG_COLOR.name()}; "
-            f"border: 1px solid {_GRID_COLOR.name()};"
+            f"background-color: {_bg_color().name()}; "
+            f"border: 1px solid {_grid_color().name()};"
         )
 
     def set_profile(self, profile: List[tuple]) -> None:
         self._profile = list(profile or [])
+        self.update()
+
+    def refresh_theme(self) -> None:
+        """Re-apply the panel's outer stylesheet from the active
+        palette + force a repaint so paintEvent picks up new
+        colours."""
+        self.setStyleSheet(
+            f"background-color: {_bg_color().name()}; "
+            f"border: 1px solid {_grid_color().name()};"
+        )
         self.update()
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
@@ -339,11 +402,11 @@ class _StiffnessProfilePanel(QtWidgets.QWidget):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         # Title
-        painter.setPen(_TEXT_COLOR)
+        painter.setPen(_text_color())
         painter.setFont(QtGui.QFont("", 9, QtGui.QFont.Weight.Bold))
         painter.drawText(QtCore.QPoint(10, 18), "Stiffness Profile")
         if not self._profile:
-            painter.setPen(_TEXT_COLOR)
+            painter.setPen(_text_color())
             painter.setFont(QtGui.QFont("", 9))
             painter.drawText(self.rect(),
                              QtCore.Qt.AlignmentFlag.AlignCenter,
@@ -359,21 +422,22 @@ class _StiffnessProfilePanel(QtWidgets.QWidget):
         for i, (label, raw, norm) in enumerate(self._profile):
             y = top + i * (self.BAR_HEIGHT + self.ROW_GAP)
             # Label
-            painter.setPen(_TEXT_COLOR)
+            painter.setPen(_text_color())
             painter.drawText(QtCore.QPoint(10, y + self.BAR_HEIGHT - 1),
                              label)
-            # Track (full-width gray)
-            painter.setBrush(QtGui.QBrush(QtGui.QColor("#1a2532")))
-            painter.setPen(QtGui.QPen(_GRID_COLOR))
+            # Track — uses the palette's profile_bar_track colour so
+            # it matches the active theme (was hardcoded #1a2532).
+            painter.setBrush(QtGui.QBrush(_palette.qcolor('profile_bar_track')))
+            painter.setPen(QtGui.QPen(_grid_color()))
             painter.drawRect(bar_x, y, bar_max_w, self.BAR_HEIGHT)
-            # Fill (accent colour scaled by norm)
+            # Fill — palette's profile_bar_fill colour, scaled by norm.
             fill_w = max(0, int(bar_max_w * max(0.0, min(1.0, norm))))
             if fill_w > 0:
-                painter.setBrush(QtGui.QBrush(_PRIMARY_COLOR))
+                painter.setBrush(QtGui.QBrush(_palette.qcolor('profile_bar_fill')))
                 painter.setPen(QtCore.Qt.PenStyle.NoPen)
                 painter.drawRect(bar_x + 1, y + 1, fill_w - 1, self.BAR_HEIGHT - 1)
             # Value text on the right
-            painter.setPen(_TEXT_COLOR)
+            painter.setPen(_text_color())
             value_text = (f"{raw:,.2f}" if abs(raw) < 100 else f"{raw:,.0f}")
             painter.drawText(QtCore.QPoint(bar_x + bar_max_w + 6,
                                            y + self.BAR_HEIGHT - 1),

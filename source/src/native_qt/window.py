@@ -171,16 +171,23 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
             "parts may produce incomplete or corrupted output."
         )
         self.compat_notice.setWordWrap(True)
-        self.compat_notice.setStyleSheet(
-            "QLabel {"
-            "  background-color: #3a2a18;"   # warm warning brown
-            "  color: #f5c98e;"              # soft amber text
-            "  border-bottom: 1px solid #5a3a1a;"
-            "  padding: 8px 14px;"
-            "  font-size: 12px;"
-            "  font-weight: 500;"
-            "}"
-        )
+        # Re-style from the central theme palette so the banner
+        # repaints when the user switches themes via File > Customize.
+        from .theme_palette import color as _palette_color, register_listener as _palette_register
+
+        def _restyle_compat_notice():
+            self.compat_notice.setStyleSheet(
+                "QLabel {"
+                f"  background-color: {_palette_color('notice_bg')};"
+                f"  color: {_palette_color('notice_text')};"
+                f"  border-bottom: 1px solid {_palette_color('notice_border')};"
+                "  padding: 8px 14px;"
+                "  font-size: 12px;"
+                "  font-weight: 500;"
+                "}"
+            )
+        _restyle_compat_notice()
+        _palette_register(_restyle_compat_notice)
         self.compat_notice.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )

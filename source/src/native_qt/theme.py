@@ -882,7 +882,16 @@ def apply_theme(app: QtWidgets.QApplication, *,
     ``ui_scale`` is a font-size multiplier. Qt scales most widget
     metrics from font metrics, so adjusting the app font size is the
     cheapest way to scale the whole UI uniformly.
+
+    Also updates the central theme_palette so custom-painted widgets
+    (chart panels, the stiffness profile bars, themed dialogs) repaint
+    with the new palette.
     """
+    # Update the central palette FIRST so any listener-triggered
+    # repaints see the new colours when they recompute.
+    from . import theme_palette as _palette
+    _palette.set_active(theme)
+
     app.setStyle("Fusion")
     apply_app_palette(app, theme)
 

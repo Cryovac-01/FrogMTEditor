@@ -20,6 +20,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 import customize_settings as _cs
 from .theme import apply_theme
+from . import theme_palette as _palette
 
 
 # Local palette — matches the help dialog so the two popups feel
@@ -130,7 +131,15 @@ class CustomizeDialog(QtWidgets.QDialog):
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Customize Frog Mod Editor")
-        self.setStyleSheet(_DIALOG_QSS)
+        # Build QSS from the active palette + register a listener so
+        # the dialog re-themes itself live as the user clicks the
+        # theme radios (otherwise the dialog stays in the OLD theme
+        # while the rest of the app switches).
+        try:
+            self.setStyleSheet(_palette.build_dialog_qss())
+            _palette.register_listener(self._refresh_dialog_qss)
+        except Exception:
+            self.setStyleSheet(_DIALOG_QSS)
         self.setModal(True)
         self.resize(520, 540)
 
@@ -318,6 +327,15 @@ class CustomizeDialog(QtWidgets.QDialog):
         pass
 
     # ── Footer actions ──
+    def _refresh_dialog_qss(self) -> None:
+        """Listener fired by theme_palette.set_active when the theme
+        switches — rebuilds the dialog's stylesheet so its own
+        chrome reflects the new palette immediately."""
+        try:
+            self.setStyleSheet(_palette.build_dialog_qss())
+        except Exception:
+            pass
+
     def _on_done(self) -> None:
         cfg = self._current_settings()
         _cs.save(cfg)
