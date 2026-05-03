@@ -294,7 +294,7 @@ def make_need_help_header(topic_key,
     layout.setSpacing(6)
     layout.addStretch(1)
 
-    btn = QtWidgets.QPushButton("?  Need Help?")
+    btn = QtWidgets.QPushButton("Need Help?")
     btn.setStyleSheet(
         f"QPushButton {{"
         f"  background: transparent;"
