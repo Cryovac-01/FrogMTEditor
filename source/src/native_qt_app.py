@@ -41,6 +41,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     _cfg = _load_customize()
     apply_theme(app, theme=_cfg.get('theme', 'dark'),
                 ui_scale=_cfg.get('ui_scale', 1.0))
+    # Activate the persisted language. If a translation pack exists
+    # for it, future _("string") calls will pull from the pack;
+    # otherwise English is used (silent fallback).
+    from i18n import set_language
+    set_language(_cfg.get('language', 'en'))
     service = NativeEditorService()
     window = NativeQtEditorWindow(service, smoke_test=smoke_test)
 

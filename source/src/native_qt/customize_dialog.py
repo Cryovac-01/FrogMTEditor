@@ -22,6 +22,7 @@ import customize_settings as _cs
 from .theme import apply_theme
 from . import theme_palette as _palette
 from . import scale as _scale
+from i18n import _ as _t
 
 
 # Local palette — matches the help dialog so the two popups feel
@@ -131,7 +132,7 @@ class CustomizeDialog(QtWidgets.QDialog):
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Customize Frog Mod Editor")
+        self.setWindowTitle(_t("Customize Frog Mod Editor"))
         # Build QSS from the active palette + register a listener so
         # the dialog re-themes itself live as the user clicks the
         # theme radios (otherwise the dialog stays in the OLD theme
@@ -155,36 +156,36 @@ class CustomizeDialog(QtWidgets.QDialog):
         outer.setContentsMargins(20, 16, 20, 16)
         outer.setSpacing(8)
 
-        title = QtWidgets.QLabel("Customize")
+        title = QtWidgets.QLabel(_t("Customize"))
         title.setProperty('role', 'dialogTitle')
         outer.addWidget(title)
-        sub = QtWidgets.QLabel(
+        sub = QtWidgets.QLabel(_t(
             "Adjust appearance, scale, and language. Changes apply "
             "immediately — close the dialog to confirm or click "
             "Cancel to revert."
-        )
+        ))
         sub.setProperty('role', 'dialogSubtitle')
         sub.setWordWrap(True)
         outer.addWidget(sub)
 
         # ── Theme section ──
-        theme_box = QtWidgets.QGroupBox("Theme")
+        theme_box = QtWidgets.QGroupBox(_t("Theme"))
         theme_layout = QtWidgets.QVBoxLayout(theme_box)
         theme_layout.setSpacing(2)
-        theme_hint = QtWidgets.QLabel(
+        theme_hint = QtWidgets.QLabel(_t(
             "Pick the colour scheme. High contrast is designed for "
             "accessibility (low-vision users) and bright-light "
             "environments where the dark theme is hard to read."
-        )
+        ))
         theme_hint.setProperty('role', 'hint')
         theme_hint.setWordWrap(True)
         theme_layout.addWidget(theme_hint)
         self._theme_group = QtWidgets.QButtonGroup(self)
         self._theme_buttons = {}
         for key, label in (
-            ('dark', 'Dark (default)'),
-            ('light', 'Light'),
-            ('high_contrast', 'High Contrast'),
+            ('dark', _t('Dark (default)')),
+            ('light', _t('Light')),
+            ('high_contrast', _t('High Contrast')),
         ):
             rb = QtWidgets.QRadioButton(label)
             self._theme_group.addButton(rb)
@@ -194,23 +195,23 @@ class CustomizeDialog(QtWidgets.QDialog):
         outer.addWidget(theme_box)
 
         # ── UI scale section ──
-        scale_box = QtWidgets.QGroupBox("UI Scale")
+        scale_box = QtWidgets.QGroupBox(_t("UI Scale"))
         scale_layout = QtWidgets.QVBoxLayout(scale_box)
         scale_layout.setSpacing(2)
-        scale_hint = QtWidgets.QLabel(
+        scale_hint = QtWidgets.QLabel(_t(
             "Scales font size + most widget metrics. Larger sizes "
             "are easier on the eyes; smaller sizes fit more "
             "information on screen."
-        )
+        ))
         scale_hint.setProperty('role', 'hint')
         scale_hint.setWordWrap(True)
         scale_layout.addWidget(scale_hint)
         self._scale_combo = QtWidgets.QComboBox()
         for value, label in (
-            (0.85, 'Small (85%)'),
-            (1.00, 'Default (100%)'),
-            (1.15, 'Large (115%)'),
-            (1.30, 'Extra Large (130%)'),
+            (0.85, _t('Small (85%)')),
+            (1.00, _t('Default (100%)')),
+            (1.15, _t('Large (115%)')),
+            (1.30, _t('Extra Large (130%)')),
         ):
             self._scale_combo.addItem(label, value)
         self._scale_combo.currentIndexChanged.connect(self._on_scale_changed)
@@ -218,15 +219,15 @@ class CustomizeDialog(QtWidgets.QDialog):
         outer.addWidget(scale_box)
 
         # ── Language section ──
-        lang_box = QtWidgets.QGroupBox("Language")
+        lang_box = QtWidgets.QGroupBox(_t("Language"))
         lang_layout = QtWidgets.QVBoxLayout(lang_box)
         lang_layout.setSpacing(2)
-        lang_hint = QtWidgets.QLabel(
+        lang_hint = QtWidgets.QLabel(_t(
             "Preferred interface language. Note: only English is "
             "currently translated. Selecting another language saves "
             "your preference but the UI stays in English until "
             "translation packs are added in a future update."
-        )
+        ))
         lang_hint.setProperty('role', 'hint')
         lang_hint.setWordWrap(True)
         lang_layout.addWidget(lang_hint)
@@ -247,11 +248,11 @@ class CustomizeDialog(QtWidgets.QDialog):
         footer.setSpacing(8)
         footer.addStretch(1)
 
-        cancel_btn = QtWidgets.QPushButton("Cancel")
+        cancel_btn = QtWidgets.QPushButton(_t("Cancel"))
         cancel_btn.clicked.connect(self._on_cancel)
         footer.addWidget(cancel_btn)
 
-        ok_btn = QtWidgets.QPushButton("Done")
+        ok_btn = QtWidgets.QPushButton(_t("Done"))
         ok_btn.setProperty('primary', True)
         ok_btn.clicked.connect(self._on_done)
         footer.addWidget(ok_btn)
@@ -323,9 +324,18 @@ class CustomizeDialog(QtWidgets.QDialog):
         self._apply_now()
 
     def _on_language_changed(self, _index: int = 0) -> None:
-        # Language selection doesn't re-apply the theme; the only
-        # observable change is the saved preference.
-        pass
+        # Activate the new language immediately so newly-built widgets
+        # (e.g. the Help dialog opened after this change) pick it up.
+        # Already-rendered widgets stay in the old language until the
+        # app is restarted — Qt doesn't have a clean "re-translate
+        # the live tree" API for our pattern. The user sees this
+        # acknowledged via the "translation pending" suffix on
+        # non-English picks.
+        try:
+            from i18n import set_language
+            set_language(str(self._lang_combo.currentData() or 'en'))
+        except Exception:
+            pass
 
     # ── Footer actions ──
     def _refresh_dialog_qss(self) -> None:

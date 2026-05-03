@@ -305,7 +305,10 @@ def make_need_help_header(topic_key,
     layout.setSpacing(6)
     layout.addStretch(1)
 
-    btn = QtWidgets.QPushButton("Need Help?")
+    # i18n: button label flows through the translation layer so a
+    # Spanish (or other) pack can localize it.
+    from i18n import _ as _t
+    btn = QtWidgets.QPushButton(_t("Need Help?"))
     btn.setStyleSheet(
         f"QPushButton {{"
         f"  background: transparent;"

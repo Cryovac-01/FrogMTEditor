@@ -1,0 +1,58 @@
+{
+  "_comment": "Spanish translation pack for Frog Mod Editor. Keys are the English source strings used in code. Edit by hand; new keys are added by wrapping more code-side strings with i18n._(). Falls back to English when a key is missing.",
+
+  "&File": "&Archivo",
+  "&Create": "&Crear",
+  "&Tools": "&Herramientas",
+  "&View": "&Ver",
+  "&Help": "&Ayuda",
+
+  "Reload Workspace": "Recargar espacio de trabajo",
+  "Save Changes": "Guardar cambios",
+  "Revert Changes": "Revertir cambios",
+  "Pack Current Part": "Empaquetar pieza actual",
+  "Pack Workspace": "Empaquetar espacio de trabajo",
+  "Pack Templates": "Empaquetar plantillas",
+  "Quick Actions": "Acciones rápidas",
+  "Customize…": "Personalizar…",
+
+  "New Engine": "Nuevo motor",
+  "New Tire": "Neumático nuevo",
+  "Fork Current Engine": "Bifurcar motor actual",
+
+  "Economy Editor": "Editor de economía",
+  "Bus Route Planner": "Planificador de rutas de autobús",
+  "Transmission Editor": "Editor de transmisión",
+  "Policy Editor": "Editor de políticas",
+
+  "Cancel": "Cancelar",
+  "Done": "Hecho",
+  "OK": "Aceptar",
+  "Close": "Cerrar",
+  "Save": "Guardar",
+  "Delete": "Eliminar",
+  "Apply": "Aplicar",
+  "Reset": "Restablecer",
+
+  "Need Help?": "¿Necesitas ayuda?",
+
+  "Customize Frog Mod Editor": "Personalizar Frog Mod Editor",
+  "Customize": "Personalizar",
+  "Adjust appearance, scale, and language. Changes apply immediately — close the dialog to confirm or click Cancel to revert.": "Ajusta la apariencia, escala e idioma. Los cambios se aplican inmediatamente — cierra el diálogo para confirmar o haz clic en Cancelar para revertir.",
+
+  "Theme": "Tema",
+  "Pick the colour scheme. High contrast is designed for accessibility (low-vision users) and bright-light environments where the dark theme is hard to read.": "Elige el esquema de colores. Alto contraste está diseñado para accesibilidad (usuarios con baja visión) y entornos de mucha luz donde el tema oscuro es difícil de leer.",
+  "Dark (default)": "Oscuro (predeterminado)",
+  "Light": "Claro",
+  "High Contrast": "Alto contraste",
+
+  "UI Scale": "Escala de la interfaz",
+  "Scales font size + most widget metrics. Larger sizes are easier on the eyes; smaller sizes fit more information on screen.": "Escala el tamaño de fuente y la mayoría de métricas de widgets. Los tamaños más grandes son más fáciles para los ojos; los más pequeños caben más información en pantalla.",
+  "Small (85%)": "Pequeño (85%)",
+  "Default (100%)": "Predeterminado (100%)",
+  "Large (115%)": "Grande (115%)",
+  "Extra Large (130%)": "Extra grande (130%)",
+
+  "Language": "Idioma",
+  "Preferred interface language. Note: only English is currently translated. Selecting another language saves your preference but the UI stays in English until translation packs are added in a future update.": "Idioma preferido de la interfaz. Nota: solo el inglés y español están traducidos actualmente. Seleccionar otro idioma guarda tu preferencia pero la interfaz permanece en inglés hasta que se añadan paquetes de traducción en una actualización futura."
+}

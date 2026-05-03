@@ -851,32 +851,37 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         return action
 
     def _configure_menus(self) -> None:
+        # Translation-aware menu construction. Every visible string
+        # goes through i18n._() so a Spanish (or other) translation
+        # pack can localize it without touching this file.
+        from i18n import _ as _t
+
         menu_bar = self.menuBar()
-        file_menu = menu_bar.addMenu("&File")
-        file_menu.addAction(self._make_action("Reload Workspace", self.reload_workspace, shortcut="Ctrl+R"))
-        file_menu.addAction(self._make_action("Save Changes", self.save_current, shortcut="Ctrl+S"))
-        file_menu.addAction(self._make_action("Revert Changes", self.revert_current, shortcut="Ctrl+Shift+R"))
+        file_menu = menu_bar.addMenu(_t("&File"))
+        file_menu.addAction(self._make_action(_t("Reload Workspace"), self.reload_workspace, shortcut="Ctrl+R"))
+        file_menu.addAction(self._make_action(_t("Save Changes"), self.save_current, shortcut="Ctrl+S"))
+        file_menu.addAction(self._make_action(_t("Revert Changes"), self.revert_current, shortcut="Ctrl+Shift+R"))
         file_menu.addSeparator()
-        file_menu.addAction(self._make_action("Pack Current Part", self.pack_current_part, shortcut="Ctrl+Alt+P"))
-        file_menu.addAction(self._make_action("Pack Workspace", self.pack_mod, shortcut="Ctrl+P"))
-        file_menu.addAction(self._make_action("Pack Templates", self.pack_templates, shortcut="Ctrl+Shift+P"))
+        file_menu.addAction(self._make_action(_t("Pack Current Part"), self.pack_current_part, shortcut="Ctrl+Alt+P"))
+        file_menu.addAction(self._make_action(_t("Pack Workspace"), self.pack_mod, shortcut="Ctrl+P"))
+        file_menu.addAction(self._make_action(_t("Pack Templates"), self.pack_templates, shortcut="Ctrl+Shift+P"))
         file_menu.addSeparator()
-        file_menu.addAction(self._make_action("Quick Actions", self.open_quick_actions, shortcut="Ctrl+K"))
+        file_menu.addAction(self._make_action(_t("Quick Actions"), self.open_quick_actions, shortcut="Ctrl+K"))
         file_menu.addSeparator()
         # Customize: theme / UI scale / language popup. Opens via a
         # modal dialog that re-applies the theme live and persists
         # the choice to data/customize_settings.json.
-        file_menu.addAction(self._make_action("Customize…", self.open_customize_dialog))
+        file_menu.addAction(self._make_action(_t("Customize…"), self.open_customize_dialog))
 
-        create_menu = menu_bar.addMenu("&Create")
-        create_menu.addAction(self._make_action("New Engine", self.open_engine_creator, shortcut="Ctrl+Shift+N"))
-        create_menu.addAction(self._make_action("New Tire", self.open_tire_creator, shortcut="Ctrl+Alt+N"))
-        create_menu.addAction(self._make_action("Fork Current Engine", self.fork_engine, shortcut="Ctrl+Shift+F"))
+        create_menu = menu_bar.addMenu(_t("&Create"))
+        create_menu.addAction(self._make_action(_t("New Engine"), self.open_engine_creator, shortcut="Ctrl+Shift+N"))
+        create_menu.addAction(self._make_action(_t("New Tire"), self.open_tire_creator, shortcut="Ctrl+Alt+N"))
+        create_menu.addAction(self._make_action(_t("Fork Current Engine"), self.fork_engine, shortcut="Ctrl+Shift+F"))
 
-        tools_menu = menu_bar.addMenu("&Tools")
-        tools_menu.addAction(self._make_action("Economy Editor", self.open_economy_editor, shortcut="Ctrl+E"))
-        tools_menu.addAction(self._make_action("Bus Route Planner", self.open_bus_route_planner, shortcut="Ctrl+B"))
-        tools_menu.addAction(self._make_action("Transmission Editor", self.open_transmission_editor, shortcut="Ctrl+T"))
+        tools_menu = menu_bar.addMenu(_t("&Tools"))
+        tools_menu.addAction(self._make_action(_t("Economy Editor"), self.open_economy_editor, shortcut="Ctrl+E"))
+        tools_menu.addAction(self._make_action(_t("Bus Route Planner"), self.open_bus_route_planner, shortcut="Ctrl+B"))
+        tools_menu.addAction(self._make_action(_t("Transmission Editor"), self.open_transmission_editor, shortcut="Ctrl+T"))
 
         view_menu = menu_bar.addMenu("&View")
         view_menu.addAction(self._make_action("Focus Search", lambda: self.search_edit.setFocus(), shortcut="Ctrl+F"))
