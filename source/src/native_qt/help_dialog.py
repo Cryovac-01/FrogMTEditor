@@ -138,7 +138,7 @@ class HelpDialog(QtWidgets.QDialog):
         # the static _DIALOG_QSS only if the palette module is
         # unavailable for some reason.
         try:
-            self.setStyleSheet(_palette.build_dialog_qss())
+            self.setStyleSheet(_palette.build_dialog_qss(_scale.active()))
         except Exception:
             self.setStyleSheet(_DIALOG_QSS)
         self.resize(_scale.sx(1100), _scale.sx(720))

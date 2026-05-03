@@ -202,9 +202,34 @@ def unregister_listener(callback: Callable[[], None]) -> None:
 # theme change. Centralises the shared dialog look so help_dialog and
 # customize_dialog can share it.
 # ──────────────────────────────────────────────────────────────────────
-def build_dialog_qss() -> str:
+def build_dialog_qss(ui_scale: float = 1.0) -> str:
     """Return a QSS string for modal popup dialogs (Help, Customize),
-    built from the active palette. Re-run after theme changes."""
+    built from the active palette. Re-run after theme OR scale changes.
+
+    ``ui_scale`` is multiplied into every px-based font and metric
+    so the dialog respects the user's UI scale preference. Without
+    this, the dialog stays at the hardcoded base size while the rest
+    of the app grows.
+    """
+    s = max(0.5, float(ui_scale or 1.0))
+    # Scaled font sizes (px) — we use px in dialog QSS because pt
+    # is already scaled by app.setFont() and would compound.
+    fs_title    = int(round(18 * s))
+    fs_section  = int(round(13 * s))
+    fs_body     = int(round(12 * s))
+    fs_hint     = int(round(11 * s))
+    fs_browser  = int(round(13 * s))
+    # Scaled metric sizes — combo height grows so larger scales are
+    # actually clickable.
+    combo_h     = int(round(22 * s))
+    radio_box   = int(round(14 * s))
+    radio_r     = max(1, radio_box // 2)
+    arrow_w     = int(round(20 * s))
+    arrow_size  = int(round(8 * s))
+    # Pre-build the SVG down-arrow inline so the dropdown indicator
+    # is always visible and themed (Qt hides its default arrow as
+    # soon as we style any QComboBox subcontrol).
+    arrow_color = color('text').lstrip('#')
     return f"""
 QDialog {{
     background-color: {color('bg')};
@@ -212,48 +237,57 @@ QDialog {{
 }}
 QLabel {{ color: {color('text')}; background: transparent; }}
 QLabel[role="dialogTitle"] {{
-    font-size: 18px;
+    font-size: {fs_title}px;
     font-weight: 700;
     padding-bottom: 4px;
 }}
 QLabel[role="dialogSubtitle"] {{
     color: {color('muted')};
-    font-size: 12px;
+    font-size: {fs_body}px;
     padding-bottom: 8px;
 }}
 QLabel[role="sectionHeader"] {{
     color: {color('text')};
-    font-size: 13px;
+    font-size: {fs_section}px;
     font-weight: 600;
     padding-top: 10px;
 }}
 QLabel[role="hint"] {{
     color: {color('muted')};
-    font-size: 11px;
+    font-size: {fs_hint}px;
     padding: 2px 0 8px 0;
 }}
 QGroupBox {{
     background: {color('bg_panel')};
+    color: {color('text')};
     border: 1px solid {color('border')};
     border-radius: 5px;
-    margin-top: 12px;
-    padding: 8px 12px 12px 12px;
+    margin-top: 14px;
+    padding: 14px 12px 12px 12px;
+    font-size: {fs_section}px;
+    font-weight: 600;
 }}
 QGroupBox::title {{
+    /* Float the title over the top border. Background MUST match
+       the dialog background (not panel), otherwise the title sits
+       on a different colour from what's underneath the border, which
+       is what made it look like a black/yellow box in light/HC. */
     subcontrol-origin: margin;
     subcontrol-position: top left;
     left: 12px;
-    padding: 0 6px;
+    top: 0px;
+    padding: 0 8px;
+    background-color: {color('bg')};
     color: {color('text')};
     font-weight: 600;
 }}
 QLineEdit {{
-    background: {color('bg_panel')};
+    background: {color('bg_input')};
     color: {color('text')};
     border: 1px solid {color('border')};
     border-radius: 4px;
     padding: 6px 10px;
-    font-size: 12px;
+    font-size: {fs_body}px;
 }}
 QLineEdit:focus {{ border-color: {color('accent')}; }}
 QTreeWidget {{
@@ -262,7 +296,7 @@ QTreeWidget {{
     border: 1px solid {color('border')};
     border-radius: 4px;
     padding: 4px;
-    font-size: 12px;
+    font-size: {fs_body}px;
     show-decoration-selected: 1;
 }}
 QTreeWidget::item {{
@@ -282,27 +316,66 @@ QTextBrowser {{
     border: 1px solid {color('border')};
     border-radius: 4px;
     padding: 14px 18px;
-    font-size: 13px;
+    font-size: {fs_browser}px;
 }}
-QRadioButton {{ color: {color('text')}; padding: 4px 0; }}
+QRadioButton {{
+    color: {color('text')};
+    padding: 4px 0;
+    font-size: {fs_body}px;
+}}
 QRadioButton::indicator {{
-    width: 14px; height: 14px;
-    border: 1px solid #6b7c8e;
-    border-radius: 7px;
+    width: {radio_box}px; height: {radio_box}px;
+    border: 1px solid {color('border')};
+    border-radius: {radio_r}px;
     background: {color('bg_input')};
 }}
 QRadioButton::indicator:checked {{
     background: {color('accent')};
     border: 1px solid {color('accent')};
 }}
+QCheckBox {{
+    color: {color('text')};
+    padding: 4px 0;
+    font-size: {fs_body}px;
+}}
+QCheckBox::indicator {{
+    width: {radio_box}px; height: {radio_box}px;
+    border: 1px solid {color('border')};
+    border-radius: 3px;
+    background: {color('bg_input')};
+}}
+QCheckBox::indicator:checked {{
+    background: {color('accent')};
+    border: 1px solid {color('accent')};
+}}
 QComboBox {{
-    background: {color('bg_panel')};
+    background: {color('bg_input')};
     color: {color('text')};
     border: 1px solid {color('border')};
     border-radius: 4px;
     padding: 5px 10px;
-    min-height: 22px;
-    font-size: 12px;
+    padding-right: {arrow_w + 4}px;
+    min-height: {combo_h}px;
+    font-size: {fs_body}px;
+}}
+QComboBox:hover {{ border-color: {color('accent')}; }}
+QComboBox:focus {{ border-color: {color('accent')}; }}
+QComboBox::drop-down {{
+    /* Make the drop-down area visible + give it a left border so
+       the user can see where the dropdown handle is. */
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: {arrow_w}px;
+    border-left: 1px solid {color('border')};
+    background: transparent;
+}}
+QComboBox::down-arrow {{
+    /* Inline SVG triangle so the arrow is always present and
+       themed. Qt's default arrow disappears as soon as any
+       QComboBox subcontrol is styled, so we draw our own. */
+    image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1.5L6 6.5L11 1.5' stroke='%23{arrow_color}' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    width: {arrow_size}px;
+    height: {arrow_size}px;
 }}
 QComboBox QAbstractItemView {{
     background: {color('bg_panel')};
@@ -310,6 +383,12 @@ QComboBox QAbstractItemView {{
     selection-background-color: {color('accent')};
     selection-color: {color('accent_text')};
     border: 1px solid {color('border')};
+    font-size: {fs_body}px;
+    padding: 2px;
+}}
+QComboBox QAbstractItemView::item {{
+    min-height: {combo_h}px;
+    padding: 4px 8px;
 }}
 QPushButton {{
     background: transparent;
@@ -317,7 +396,7 @@ QPushButton {{
     border: 1px solid {color('border')};
     border-radius: 4px;
     padding: 6px 14px;
-    font-size: 12px;
+    font-size: {fs_body}px;
 }}
 QPushButton:hover {{
     border-color: {color('accent')};
@@ -332,5 +411,13 @@ QPushButton[primary="true"] {{
 QPushButton[primary="true"]:hover {{
     background: {color('accent_hover')};
     border-color: {color('accent_hover')};
+}}
+QMessageBox {{
+    background-color: {color('bg')};
+    color: {color('text')};
+}}
+QMessageBox QLabel {{
+    color: {color('text')};
+    font-size: {fs_body}px;
 }}
 """

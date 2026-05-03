@@ -147,8 +147,9 @@ class CustomizeDialog(QtWidgets.QDialog):
         # theme radios (otherwise the dialog stays in the OLD theme
         # while the rest of the app switches).
         try:
-            self.setStyleSheet(_palette.build_dialog_qss())
+            self.setStyleSheet(_palette.build_dialog_qss(_scale.active()))
             _palette.register_listener(self._refresh_dialog_qss)
+            _scale.register_listener(self._refresh_dialog_qss)
         except Exception:
             self.setStyleSheet(_DIALOG_QSS)
         self.setModal(True)
@@ -392,11 +393,12 @@ class CustomizeDialog(QtWidgets.QDialog):
 
     # ── Footer actions ──
     def _refresh_dialog_qss(self) -> None:
-        """Listener fired by theme_palette.set_active when the theme
-        switches — rebuilds the dialog's stylesheet so its own
-        chrome reflects the new palette immediately."""
+        """Listener fired by theme_palette.set_active OR scale.set_active
+        when the user changes theme/scale via the dialog — rebuilds
+        the dialog's stylesheet so its own chrome reflects the new
+        palette + scale immediately."""
         try:
-            self.setStyleSheet(_palette.build_dialog_qss())
+            self.setStyleSheet(_palette.build_dialog_qss(_scale.active()))
         except Exception:
             pass
 

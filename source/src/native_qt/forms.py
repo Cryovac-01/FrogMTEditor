@@ -697,7 +697,12 @@ class PartEditorForm(QtWidgets.QWidget):
         return ""
 
     def _display_section_title(self, title: str) -> str:
-        return self.section_title_overrides.get(title, title)
+        # Section title is a data token (e.g. "Performance", "Grip and
+        # Slip", "Identity and Shop") that comes from the categorize
+        # tree. Run it through i18n so non-English packs translate
+        # the section header text in the rendered form.
+        resolved = self.section_title_overrides.get(title, title)
+        return _t(resolved) if resolved else resolved
 
     def _make_group(self, title: str, compact: bool = False) -> tuple[QtWidgets.QGroupBox, QtWidgets.QVBoxLayout]:
         group = QtWidgets.QGroupBox(title)
@@ -970,7 +975,7 @@ class PartEditorForm(QtWidgets.QWidget):
         # the visible form only contains editable fields.
         if prop.get("missing"):
             return
-        name_label = QtWidgets.QLabel(format_property_name(key))
+        name_label = QtWidgets.QLabel(_t(format_property_name(key)))
         unit = str(prop.get("unit") or "").strip()
         readonly = bool(prop.get("editable") is False or is_readonly_property(key, self.part_type))
         value = get_edit_value(key, prop, self.part_type)
@@ -993,9 +998,11 @@ class PartEditorForm(QtWidgets.QWidget):
         bounds = None if readonly else _fb.lookup(key, 'property')
 
         desc = PROPERTY_DESCRIPTIONS.get(key) or ""
+        if desc:
+            desc = _t(desc)
         missing_text = ""
         if readonly and prop.get("missing"):
-            missing_text = "This field is part of the full known parameter surface, but this layout does not actually serialize it."
+            missing_text = _t("This field is part of the full known parameter surface, but this layout does not actually serialize it.")
 
         if self.creator_mode:
             wrapper = QtWidgets.QFrame()

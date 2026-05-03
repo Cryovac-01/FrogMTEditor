@@ -148,10 +148,10 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         self.status_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Fixed)
         top_actions.addWidget(self.status_label)
 
-        self.reload_button = make_action_button("Reload", role="subtle", icon=self.icons["reload"])
-        self.command_button = make_action_button("Quick Actions", role="secondary", icon=self.icons["parts"])
-        self.pack_templates_button = make_action_button("Pack Templates", role="secondary", icon=self.icons["package"])
-        self.pack_mod_button = make_action_button("Pack Mod", role="secondary", icon=self.icons["package"])
+        self.reload_button = make_action_button(_t("Reload"), role="subtle", icon=self.icons["reload"])
+        self.command_button = make_action_button(_t("Quick Actions"), role="secondary", icon=self.icons["parts"])
+        self.pack_templates_button = make_action_button(_t("Pack Templates"), role="secondary", icon=self.icons["package"])
+        self.pack_mod_button = make_action_button(_t("Pack Mod"), role="secondary", icon=self.icons["package"])
         top_actions.addWidget(self.reload_button)
         top_actions.addWidget(self.command_button)
         top_actions.addWidget(self.pack_templates_button)
@@ -170,12 +170,12 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         # DataTable rows. Until a proper migration tool exists (#7),
         # we surface this as a visible warning above the workspace
         # so users don't silently lose data.
-        self.compat_notice = QtWidgets.QLabel(
+        self.compat_notice = QtWidgets.QLabel(_t(
             "  ⚠  This build is NOT compatible with engines or tires "
             "created in earlier Frog Mod Editor versions. Re-create them "
             "in this version before saving — opening or forking older "
             "parts may produce incomplete or corrupted output."
-        )
+        ))
         self.compat_notice.setWordWrap(True)
         # Re-style from the central theme palette so the banner
         # repaints when the user switches themes via File > Customize.
@@ -1106,7 +1106,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
             if QtWidgets.QApplication.overrideCursor() is not None:
                 QtWidgets.QApplication.restoreOverrideCursor()
             self._busy = False
-            self.set_status((result or {}).get("message") or ("Task failed" if error else "Ready"))
+            self.set_status((result or {}).get("message") or (_t("Task failed") if error else _t("Ready")))
             try:
                 if on_done:
                     on_done(result, error)
@@ -1138,7 +1138,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         self._update_workspace_stats()
         self.render_part_tree()
         self._record_activity("Workspace loaded from local runtime data.")
-        self.set_status("Ready")
+        self.set_status(_t("Ready"))
         self._refresh_command_context()
         self._update_inspector()
         if not self.smoke_test:
@@ -1197,32 +1197,32 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         if not hasattr(self, "command_context_label"):
             return
         if self.workspace_mode == "create-engine":
-            title = "Engine creation flow"
-            meta = "Choose a donor template, adjust the draft, then create a new generated engine."
+            title = _t("Engine creation flow")
+            meta = _t("Choose a donor template, adjust the draft, then create a new generated engine.")
         elif self.workspace_mode == "create-tire":
-            title = "Tire creation flow"
-            meta = "Choose a donor tire, tune the exposed fields, then create a new generated tire."
+            title = _t("Tire creation flow")
+            meta = _t("Choose a donor tire, tune the exposed fields, then create a new generated tire.")
         elif self.workspace_mode == "fork-engine":
-            title = "Fork engine draft"
-            meta = "This workflow starts from the selected generated engine and writes a new generated asset."
+            title = _t("Fork engine draft")
+            meta = _t("This workflow starts from the selected generated engine and writes a new generated asset.")
         elif self.workspace_mode == "economy":
-            title = "Economy Editor"
-            meta = "Configure global economy multipliers for cargo payments, bus fares, and taxi rates."
+            title = _t("Economy Editor")
+            meta = _t("Configure global economy multipliers for cargo payments, bus fares, and taxi rates.")
         elif self.workspace_mode == "bus-routes":
-            title = "Bus Route Planner"
-            meta = "Plan bus routes on the Jeju Island map and estimate payouts with current economy settings."
+            title = _t("Bus Route Planner")
+            meta = _t("Plan bus routes on the Jeju Island map and estimate payouts with current economy settings.")
         elif self.workspace_mode == "transmission":
-            title = "Transmission Editor"
-            meta = "Browse vanilla transmissions, modify shift time, and create upgraded variants."
+            title = _t("Transmission Editor")
+            meta = _t("Browse vanilla transmissions, modify shift time, and create upgraded variants.")
         elif self.workspace_mode == "policies":
-            title = "Policy Editor"
-            meta = "Edit town policy costs and effect values, or add new policies."
+            title = _t("Policy Editor")
+            meta = _t("Edit town policy costs and effect values, or add new policies.")
         elif self.workspace_mode == "lua-scripts":
-            title = "LUA Scripts"
-            meta = "Configure and deploy runtime Lua mods (UE4SS). Check the mods you want, tune each card, then Deploy."
+            title = _t("LUA Scripts")
+            meta = _t("Configure and deploy runtime Lua mods (UE4SS). Check the mods you want, tune each card, then Deploy.")
         elif self.current_document:
-            title = self.current_document.display_name or self.current_document.name or "Selected document"
-            type_label = "Engine" if self.current_document.is_engine else "Tire" if self.current_document.is_tire else "Part"
+            title = self.current_document.display_name or self.current_document.name or _t("Selected document")
+            type_label = _t("Engine") if self.current_document.is_engine else _t("Tire") if self.current_document.is_tire else _t("Part")
             suffix_bits = [type_label]
             if self.current_document.variant:
                 suffix_bits.append(VARIANT_LABELS.get(self.current_document.variant, self.current_document.variant))
@@ -1230,11 +1230,11 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
                 suffix_bits.append(self.current_document.group_label)
             meta = "  •  ".join(bit for bit in suffix_bits if bit)
         else:
-            title = "Generated parts workspace"
-            meta = (
-                f"{self.workspace_summary.part_count} parts ready"
-                f"  •  {self.workspace_summary.engine_count} engines"
-                f"  •  {self.workspace_summary.tire_count} tires"
+            title = _t("Generated parts workspace")
+            meta = _t("{count} parts ready  •  {engines} engines  •  {tires} tires").format(
+                count=self.workspace_summary.part_count,
+                engines=self.workspace_summary.engine_count,
+                tires=self.workspace_summary.tire_count,
             )
         self.command_context_label.setText(title)
         self.command_context_meta_label.setText(meta)
@@ -1267,7 +1267,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
                 self.parts_tree.setCurrentIndex(item.index())
         else:
             self._set_workspace_mode("empty")
-        self.set_status("Ready")
+        self.set_status(_t("Ready"))
 
     def _selected_type_filter(self) -> str:
         if self.filter_engine_button.isChecked():
@@ -1871,7 +1871,7 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
             self._update_action_state()
             self._update_inspector()
         self._record_activity("Reloaded workspace from disk.")
-        self.set_status("Ready")
+        self.set_status(_t("Ready"))
 
     def save_current(self) -> None:
         if not self.current_part:
