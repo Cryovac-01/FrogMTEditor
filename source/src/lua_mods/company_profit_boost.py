@@ -132,6 +132,41 @@ end
 -- companies start getting the boost without requiring a relaunch.
 local ownedCompanies = {{}}
 
+-- Field-name cache for MTCompany's owner-character GUID. Motor Town's
+-- MTCompany struct exposes the owner under a name that varies across
+-- builds (and at least one variant -- "Net_OwnerCharacterGuid" -- is
+-- registered in metadata but errors loudly inside UE4SS's reflection
+-- layer when read, spamming the log every 30s as we rescan). We
+-- discover the working name on the first successful read, cache it,
+-- and skip the others forever after. If no candidate works the cache
+-- stays nil and we log a single warning instead of failing silently.
+local ownerGuidField = nil           -- the field name that worked
+local ownerGuidDiscoveryDone = false -- avoid re-warning on every refresh
+local OWNER_GUID_CANDIDATES = {{
+    -- Order matters: try the most likely current-build name first.
+    -- "Net_OwnerCharacterGuid" is intentionally absent — it is
+    -- metadata-mapped on MTCompany but UE4SS cannot retrieve it on
+    -- this build, and even pcall can't suppress the engine-level
+    -- error spam it produces.
+    "OwnerCharacterGuid",
+    "FounderCharacterGuid",
+}}
+
+local function GetCompanyOwnerGuid(co)
+    if ownerGuidField then
+        return SafeGet(co, ownerGuidField)
+    end
+    for _, name in ipairs(OWNER_GUID_CANDIDATES) do
+        local v = SafeGet(co, name)
+        if v ~= nil then
+            ownerGuidField = name
+            Log(string.format("MTCompany owner field discovered: %s", name))
+            return v
+        end
+    end
+    return nil
+end
+
 local function FindLocalPlayerCharacterGuid()
     -- Find the local PlayerController + the character GUID the player
     -- currently controls. In the company-system list, a company lists
@@ -181,11 +216,9 @@ local function RefreshOwnedCompanies()
             pcall(function() count = #companies end)
             for i = 1, count do
                 local co = companies[i]
-                -- Company's founding owner. Field name varies across
-                -- builds; try a few reasonable ones.
-                local ownerGuid = SafeGet(co, "OwnerCharacterGuid")
-                              or SafeGet(co, "Net_OwnerCharacterGuid")
-                              or SafeGet(co, "FounderCharacterGuid")
+                -- Company's founding owner. Cached field name lookup —
+                -- see GetCompanyOwnerGuid for the discovery logic.
+                local ownerGuid = GetCompanyOwnerGuid(co)
                 if GuidsEqual(ownerGuid, myCharacterGuid) then
                     local guid = SafeGet(co, "Guid")
                     if guid then
@@ -206,6 +239,24 @@ local function RefreshOwnedCompanies()
             names[#names + 1] = tostring(c.name)
         end
         Log("Owned companies: " .. table.concat(names, ", "))
+    elseif not ownerGuidDiscoveryDone then
+        ownerGuidDiscoveryDone = true
+        if ownerGuidField then
+            -- Field name worked but no companies matched the local
+            -- player's character GUID — they don't own any company yet.
+            Log("No owned companies (matched field: " .. ownerGuidField
+                .. ") — found a player but no company they own.")
+        else
+            -- Every candidate field returned nil. This MT build doesn't
+            -- expose the company-owner GUID under any name we know
+            -- about. The mod can't identify owned vehicles, so the
+            -- profit-share boost will never fire. Warn loudly once.
+            Log("WARNING: could not locate the MTCompany owner-GUID field "
+                .. "on this game build (tried: OwnerCharacterGuid, "
+                .. "FounderCharacterGuid). The profit-share boost will "
+                .. "not fire. Report this to Frog Mod Editor with your "
+                .. "MT build number so we can add the right field name.")
+        end
     end
 end
 
