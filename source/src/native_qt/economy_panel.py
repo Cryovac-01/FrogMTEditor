@@ -236,65 +236,10 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         ))
         scroll_layout.addWidget(header_card)
 
-        # -- Capacity Scaling Mode -----------------------------------------
-        # ── Vehicle Capacity Penalty moved to LUA Scripts tab ──────────
-        scaling_card = QtWidgets.QFrame()
-        scaling_card.setStyleSheet(f"""
-            QFrame {{
-                background: {_SURFACE};
-                border: 1px solid {_BORDER};
-                border-radius: 8px;
-            }}
-        """)
-        scaling_layout = QtWidgets.QVBoxLayout(scaling_card)
-        scaling_layout.setContentsMargins(20, 16, 20, 16)
-        scaling_layout.setSpacing(8)
-        scaling_layout.addWidget(_label(_t("CARGO BALANCE"), "eyebrow"))
-        scaling_layout.addWidget(_label(_t("Vehicle Capacity Penalty moved"), "section"))
-        scaling_layout.addWidget(_label(
-            _t("The Low / High / Off pickup-vs-truck payment reshaping lives on the "
-            "<b>LUA Scripts</b> tab now, alongside the rest of the Cryovac Lua "
-            "mods. Open that panel to configure and deploy "
-            "<code>CryovacCargoScaling</code>."),
-            "muted",
-        ))
-        scroll_layout.addWidget(scaling_card)
-
-        # -- Company Drivers Card (profit-share preset removed) ----------
-        # The old AI-Driver-Profit-Share preset scaled the INI's
-        # VehicleOwnerProfitShare field, but that value applies to every
-        # vehicle of a class globally — including AI-company and rental
-        # vehicles the player does not own. A player boosting it to 20%
-        # also saw 20% "owner cut" taken by non-company vehicles they
-        # temporarily drove, which is unfixable via INI alone. The card
-        # is retained as a stub so the section still exists in the panel
-        # layout, with a note explaining where to go for per-company
-        # profit share if we ever build it (runtime Lua hook).
-        company_card = QtWidgets.QFrame()
-        company_card.setStyleSheet(f"""
-            QFrame {{
-                background: {_SURFACE};
-                border: 1px solid {_BORDER};
-                border-radius: 8px;
-            }}
-        """)
-        company_layout = QtWidgets.QVBoxLayout(company_card)
-        company_layout.setContentsMargins(20, 16, 20, 16)
-        company_layout.setSpacing(8)
-        company_layout.addWidget(_label(_t("COMPANY DRIVERS"), "eyebrow"))
-        company_layout.addWidget(_label(_t("AI Driver Profit Share removed"), "section"))
-        company_layout.addWidget(_label(
-            _t("The profit-share preset was scaling "
-            "<code>VehicleOwnerProfitShare</code> in the balance INI, but "
-            "that field is global per vehicle class \u2014 it changed the "
-            "profit share on every matching vehicle in the world, including "
-            "AI-company and rental vehicles you don\u2019t own. A proper "
-            "\u201conly my company\u201d profit share requires a runtime "
-            "Lua hook; ask if you want one built. For now, the generated "
-            "mod INI keeps vanilla profit-share values (\u2248 5% in-game)."),
-            "muted",
-        ))
-        scroll_layout.addWidget(company_card)
+        # (The "Vehicle Capacity Penalty moved" + "AI Driver Profit
+        # Share removed" notice cards used to live here. Removed —
+        # they were transitional explainers and the panel has since
+        # stabilized.)
 
         # -- Multiplier cards (all use sliders + custom checkbox) -----------
         for eyebrow, title, desc, key in [
