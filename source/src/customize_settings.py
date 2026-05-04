@@ -58,6 +58,18 @@ DEFAULTS: Dict[str, Any] = {
     'theme': 'dark',
     'ui_scale': 1.00,
     'language': 'en',
+    # Where Pack Mod / Pack Current Part / Pack Templates write their
+    # _P.pak output. Empty string = use the user's last-used location
+    # (the historical save-dialog default). When set, the save dialog
+    # opens at this folder so the user just clicks Save without
+    # navigating, and so the .pak lands directly in the game's
+    # ~mods directory if pointed there.
+    'pak_output_dir': '',
+    # Where 'Deploy enabled Lua mods' writes the per-mod folders +
+    # mods.txt. Empty string = use source/data/lua_mod_output/ (the
+    # historical default). When set, deployments go directly to the
+    # game's UE4SS Mods directory — no copy-paste step.
+    'lua_output_dir': '',
 }
 
 
@@ -91,6 +103,17 @@ def load() -> Dict[str, Any]:
     if lang in VALID_LANGUAGES:
         out['language'] = lang
 
+    # Folder paths — accept any string; we don't gate on existence
+    # because the user's game folder might be on a removable drive
+    # that's not currently mounted, and we don't want to silently
+    # forget their preference. Empty string is the "unset" sentinel.
+    pak_dir = on_disk.get('pak_output_dir')
+    if isinstance(pak_dir, str):
+        out['pak_output_dir'] = pak_dir.strip()
+    lua_dir = on_disk.get('lua_output_dir')
+    if isinstance(lua_dir, str):
+        out['lua_output_dir'] = lua_dir.strip()
+
     return out
 
 
@@ -110,6 +133,12 @@ def save(settings: Dict[str, Any]) -> bool:
         pass
     if settings.get('language') in VALID_LANGUAGES:
         cleaned['language'] = settings['language']
+    pak_dir = settings.get('pak_output_dir')
+    if isinstance(pak_dir, str):
+        cleaned['pak_output_dir'] = pak_dir.strip()
+    lua_dir = settings.get('lua_output_dir')
+    if isinstance(lua_dir, str):
+        cleaned['lua_output_dir'] = lua_dir.strip()
 
     try:
         os.makedirs(os.path.dirname(SETTINGS_PATH), exist_ok=True)

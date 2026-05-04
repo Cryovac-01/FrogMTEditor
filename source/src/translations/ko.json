@@ -497,5 +497,14 @@
   "Wear Rate": "마모율",
   "Wear Rate 2": "마모율 2",
   "Wear and Thermal": "마모 및 열",
-  "{count} parts ready  •  {engines} engines  •  {tires} tires": "{count}개 부품 준비  •  {engines}개 엔진  •  {tires}개 타이어"
+  "{count} parts ready  •  {engines} engines  •  {tires} tires": "{count}개 부품 준비  •  {engines}개 엔진  •  {tires}개 타이어",
+  "Output Folders": "출력 폴더",
+  "Optional. Set these to write generated mods directly into your Motor Town install instead of copy-pasting them by hand. Leave blank to keep the historical behaviour (save dialog for .paks, lua_mod_output/ for Lua mods).": "선택 사항. 이 항목을 설정하면 생성된 모드를 직접 Motor Town 설치 폴더로 기록하므로 수동으로 복사·붙여넣기를 할 필요가 없습니다. 비워 두면 기존 동작(저장 대화상자 사용 .pak, lua_mod_output/ 사용 Lua 모드)이 유지됩니다.",
+  ".pak export folder (typical: <Motor Town>/MotorTown/Content/Paks/~mods/)": ".pak 내보내기 폴더 (일반: <Motor Town>/MotorTown/Content/Paks/~mods/)",
+  "Lua mods deployment folder (typical: <Motor Town>/MotorTown/Binaries/Win64/ue4ss/Mods/)": "Lua 모드 배포 폴더 (일반: <Motor Town>/MotorTown/Binaries/Win64/ue4ss/Mods/)",
+  "(not set — using default)": "(설정되지 않음 — 기본값 사용)",
+  "Browse…": "찾아보기…",
+  "Clear": "지우기",
+  "Choose .pak export folder": ".pak 내보내기 폴더 선택",
+  "Choose Lua mods deployment folder": "Lua 모드 배포 폴더 선택"
 }

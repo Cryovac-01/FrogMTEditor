@@ -497,5 +497,14 @@
   "Wear Rate": "Tasa de desgaste",
   "Wear Rate 2": "Tasa de desgaste 2",
   "Wear and Thermal": "Desgaste y térmico",
-  "{count} parts ready  •  {engines} engines  •  {tires} tires": "{count} piezas listas  •  {engines} motores  •  {tires} neumáticos"
+  "{count} parts ready  •  {engines} engines  •  {tires} tires": "{count} piezas listas  •  {engines} motores  •  {tires} neumáticos",
+  "Output Folders": "Carpetas de salida",
+  "Optional. Set these to write generated mods directly into your Motor Town install instead of copy-pasting them by hand. Leave blank to keep the historical behaviour (save dialog for .paks, lua_mod_output/ for Lua mods).": "Opcional. Configúralos para escribir los mods generados directamente en tu instalación de Motor Town en lugar de copiar y pegar a mano. Déjalo en blanco para mantener el comportamiento histórico (diálogo de guardado para .paks, lua_mod_output/ para mods de Lua).",
+  ".pak export folder (typical: <Motor Town>/MotorTown/Content/Paks/~mods/)": "Carpeta de exportación de .pak (típica: <Motor Town>/MotorTown/Content/Paks/~mods/)",
+  "Lua mods deployment folder (typical: <Motor Town>/MotorTown/Binaries/Win64/ue4ss/Mods/)": "Carpeta de despliegue de mods de Lua (típica: <Motor Town>/MotorTown/Binaries/Win64/ue4ss/Mods/)",
+  "(not set — using default)": "(no establecido — usando predeterminado)",
+  "Browse…": "Examinar…",
+  "Clear": "Borrar",
+  "Choose .pak export folder": "Elegir carpeta de exportación de .pak",
+  "Choose Lua mods deployment folder": "Elegir carpeta de despliegue de mods de Lua"
 }

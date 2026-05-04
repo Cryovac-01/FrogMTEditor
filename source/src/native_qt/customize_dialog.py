@@ -257,6 +257,37 @@ class CustomizeDialog(QtWidgets.QDialog):
         lang_layout.addWidget(self._lang_combo)
         outer.addWidget(lang_box)
 
+        # ── Output folders section ──
+        # Two folder pickers: where Pack Mod writes the .pak file, and
+        # where Deploy enabled Lua mods writes the per-mod folders.
+        # Setting these lets the user skip the manual copy-paste step
+        # by pointing at the Motor Town install paths directly.
+        folders_box = QtWidgets.QGroupBox(_t("Output Folders"))
+        folders_layout = QtWidgets.QVBoxLayout(folders_box)
+        folders_layout.setSpacing(4)
+        folders_hint = QtWidgets.QLabel(_t(
+            "Optional. Set these to write generated mods directly into "
+            "your Motor Town install instead of copy-pasting them by "
+            "hand. Leave blank to keep the historical behaviour "
+            "(save dialog for .paks, lua_mod_output/ for Lua mods)."
+        ))
+        folders_hint.setProperty('role', 'hint')
+        folders_hint.setWordWrap(True)
+        folders_layout.addWidget(folders_hint)
+
+        self._pak_dir_edit, pak_row = self._make_folder_row(
+            _t(".pak export folder (typical: <Motor Town>/MotorTown/Content/Paks/~mods/)"),
+            self._on_browse_pak_folder,
+        )
+        folders_layout.addLayout(pak_row)
+
+        self._lua_dir_edit, lua_row = self._make_folder_row(
+            _t("Lua mods deployment folder (typical: <Motor Town>/MotorTown/Binaries/Win64/ue4ss/Mods/)"),
+            self._on_browse_lua_folder,
+        )
+        folders_layout.addLayout(lua_row)
+        outer.addWidget(folders_box)
+
         outer.addStretch(1)
 
         # ── Footer ──
@@ -302,6 +333,9 @@ class CustomizeDialog(QtWidgets.QDialog):
                 self._lang_combo.setCurrentIndex(i)
                 self._lang_combo.blockSignals(False)
                 break
+        # Folder paths
+        self._pak_dir_edit.setText(str(settings.get('pak_output_dir') or ''))
+        self._lua_dir_edit.setText(str(settings.get('lua_output_dir') or ''))
 
     # ── Live change handlers ──
     def _current_settings(self) -> dict:
@@ -315,7 +349,54 @@ class CustomizeDialog(QtWidgets.QDialog):
             'theme': theme,
             'ui_scale': float(self._scale_combo.currentData() or 1.0),
             'language': str(self._lang_combo.currentData() or 'en'),
+            'pak_output_dir': self._pak_dir_edit.text().strip(),
+            'lua_output_dir': self._lua_dir_edit.text().strip(),
         }
+
+    # ── Folder picker helpers ──
+    def _make_folder_row(self, label_text: str, on_browse) -> tuple:
+        """Build one folder picker row: label + read-only path edit +
+        Browse + Clear buttons. Returns (line_edit, layout) so the
+        caller can store the edit widget for later read/write."""
+        row_label = QtWidgets.QLabel(label_text)
+        row_label.setProperty('role', 'hint')
+        row_label.setWordWrap(True)
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(6)
+        edit = QtWidgets.QLineEdit()
+        edit.setReadOnly(False)  # editable so user can paste a path
+        edit.setPlaceholderText(_t("(not set — using default)"))
+        browse_btn = QtWidgets.QPushButton(_t("Browse…"))
+        browse_btn.clicked.connect(on_browse)
+        clear_btn = QtWidgets.QPushButton(_t("Clear"))
+        clear_btn.clicked.connect(lambda: edit.setText(""))
+        row.addWidget(edit, 1)
+        row.addWidget(browse_btn, 0)
+        row.addWidget(clear_btn, 0)
+        # Assemble label + row into a vertical container so the label
+        # sits above the row.
+        wrapper = QtWidgets.QVBoxLayout()
+        wrapper.setSpacing(2)
+        wrapper.setContentsMargins(0, 6, 0, 0)
+        wrapper.addWidget(row_label)
+        wrapper.addLayout(row)
+        return edit, wrapper
+
+    def _on_browse_pak_folder(self) -> None:
+        start = self._pak_dir_edit.text().strip() or self._initial.get('pak_output_dir') or ''
+        path = QtWidgets.QFileDialog.getExistingDirectory(
+            self, _t("Choose .pak export folder"), start
+        )
+        if path:
+            self._pak_dir_edit.setText(path)
+
+    def _on_browse_lua_folder(self) -> None:
+        start = self._lua_dir_edit.text().strip() or self._initial.get('lua_output_dir') or ''
+        path = QtWidgets.QFileDialog.getExistingDirectory(
+            self, _t("Choose Lua mods deployment folder"), start
+        )
+        if path:
+            self._lua_dir_edit.setText(path)
 
     def _apply_now(self) -> None:
         cfg = self._current_settings()

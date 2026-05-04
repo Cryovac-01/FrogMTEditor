@@ -497,5 +497,14 @@
   "Wear Rate": "摩耗率",
   "Wear Rate 2": "摩耗率 2",
   "Wear and Thermal": "摩耗と熱",
-  "{count} parts ready  •  {engines} engines  •  {tires} tires": "{count} 個のパーツ準備完了  •  {engines} 個のエンジン  •  {tires} 個のタイヤ"
+  "{count} parts ready  •  {engines} engines  •  {tires} tires": "{count} 個のパーツ準備完了  •  {engines} 個のエンジン  •  {tires} 個のタイヤ",
+  "Output Folders": "出力フォルダ",
+  "Optional. Set these to write generated mods directly into your Motor Town install instead of copy-pasting them by hand. Leave blank to keep the historical behaviour (save dialog for .paks, lua_mod_output/ for Lua mods).": "任意。これらを設定すると、生成されたモッドを手動でコピー＆ペーストせずに、Motor Town のインストールフォルダに直接書き込みます。空欄のままだと従来の動作（.pak は保存ダイアログ、Lua モッドは lua_mod_output/）が維持されます。",
+  ".pak export folder (typical: <Motor Town>/MotorTown/Content/Paks/~mods/)": ".pak のエクスポート先フォルダ（通常: <Motor Town>/MotorTown/Content/Paks/~mods/）",
+  "Lua mods deployment folder (typical: <Motor Town>/MotorTown/Binaries/Win64/ue4ss/Mods/)": "Lua モッドのデプロイ先フォルダ（通常: <Motor Town>/MotorTown/Binaries/Win64/ue4ss/Mods/）",
+  "(not set — using default)": "（未設定 — デフォルトを使用）",
+  "Browse…": "参照…",
+  "Clear": "クリア",
+  "Choose .pak export folder": ".pak のエクスポート先フォルダを選択",
+  "Choose Lua mods deployment folder": "Lua モッドのデプロイ先フォルダを選択"
 }

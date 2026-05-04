@@ -2096,6 +2096,23 @@ class NativeQtEditorWindow(QtWidgets.QMainWindow):
         self.set_status("Economy settings applied and staged for packing.")
 
     def _choose_save_path(self, title: str, initial_path: str) -> str:
+        # If the user configured a default pak output folder via
+        # File > Customize, redirect the save dialog to open there
+        # with the auto-suggested file name preselected. The user
+        # still gets to confirm or rename — we just save them the
+        # navigation step every time. Falls back to the historical
+        # initial_path (next to the project's default_paks_dir) if
+        # the setting is empty.
+        try:
+            from customize_settings import load as _load_cs
+            cfg = _load_cs()
+            pak_dir = (cfg.get('pak_output_dir') or '').strip()
+            if pak_dir and os.path.isdir(pak_dir):
+                # Replace just the directory part of initial_path,
+                # keep the suggested filename.
+                initial_path = os.path.join(pak_dir, os.path.basename(initial_path))
+        except Exception:
+            pass
         output_path, _ = QtWidgets.QFileDialog.getSaveFileName(
             self,
             title,

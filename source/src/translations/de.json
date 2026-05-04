@@ -1,12 +1,10 @@
 {
   "_comment": "Deutsches Übersetzungspaket für Frog Mod Editor — vollständige UI-Abdeckung. Schlüssel sind die englischen Quellzeichenfolgen, die im Code verwendet werden (der Nachschlüssel ist die Quelle). Von Hand bearbeiten; neue Schlüssel werden durch Umhüllen zusätzlicher Code-seitiger Zeichenfolgen mit i18n._() hinzugefügt. Fällt zurück zum Englischen, wenn ein Schlüssel fehlt.",
-
   "&File": "&Datei",
   "&Create": "&Erstellen",
   "&Tools": "&Extras",
   "&View": "&Ansicht",
   "&Help": "&Hilfe",
-
   "Reload Workspace": "Arbeitsbereich neu laden",
   "Save Changes": "Änderungen speichern",
   "Revert Changes": "Änderungen verwerfen",
@@ -15,11 +13,9 @@
   "Pack Templates": "Vorlagen packen",
   "Quick Actions": "Schnellaktionen",
   "Customize…": "Anpassen…",
-
   "New Engine": "Neuer Motor",
   "New Tire": "Neuer Reifen",
   "Fork Current Engine": "Aktuellen Motor klonen",
-
   "Economy Editor": "Wirtschafts-Editor",
   "Bus Route Planner": "Busrouten-Planer",
   "Bus Routes": "Busrouten",
@@ -28,14 +24,12 @@
   "Policy Editor": "Richtlinien-Editor",
   "Policies": "Richtlinien",
   "Lua Mods": "Lua-Mods",
-
   "Focus Search": "Suche fokussieren",
   "Open Validation Inspector": "Validierungsprüfer öffnen",
   "Open Audio Inspector": "Audio-Prüfer öffnen",
   "Open Metadata Inspector": "Metadaten-Prüfer öffnen",
   "Open Activity Inspector": "Aktivitätsprüfer öffnen",
   "Keyboard Shortcuts": "Tastenkombinationen",
-
   "Cancel": "Abbrechen",
   "Done": "Fertig",
   "OK": "OK",
@@ -46,21 +40,17 @@
   "Reset": "Zurücksetzen",
   "Run": "Ausführen",
   "Action": "Aktion",
-
   "Need Help?": "Benötigst du Hilfe?",
   "Help — {title}": "Hilfe — {title}",
   "Search sections…": "Abschnitte durchsuchen…",
   "Open detailed help for this page": "Detaillierte Hilfe für diese Seite öffnen",
-
   "MOD WORKSPACE": "MOD-ARBEITSBEREICH",
   "Generated parts workspace": "Arbeitsbereich für generierte Komponenten",
   "Waiting for local workspace bootstrap.": "Warten auf lokales Arbeitsbereich-Bootstrap.",
   "Starting local workspace...": "Lokaler Arbeitsbereich wird gestartet…",
-
   "Generated Parts": "Generierte Komponenten",
   "Engines 0": "Motoren 0",
   "Tires 0": "Reifen 0",
-
   "Search": "Suchen",
   "Search parts": "Komponenten suchen",
   "Search engines": "Motoren suchen",
@@ -72,7 +62,6 @@
   "Status": "Status",
   "Field": "Feld",
   "Value": "Wert",
-
   "WORKSPACE OVERVIEW": "ARBEITSBEREICH-ÜBERSICHT",
   "Generated Parts Workspace": "Arbeitsbereich für generierte Komponenten",
   "CURRENT PART": "AKTUELLE KOMPONENTE",
@@ -81,7 +70,6 @@
   "The overview summarises the selected part, its current risk status, and the next recommended actions.": "Die Übersicht fasst die ausgewählte Komponente, ihren aktuellen Risikostatus und die nächsten empfohlenen Maßnahmen zusammen.",
   "Current document snapshot": "Aktueller Dokument-Snapshot",
   "Edits stay local until you save them into generated data.": "Bearbeitungen bleiben lokal, bis du sie in generierte Daten speicherst.",
-
   "Contextual Inspector": "Kontext-Prüfer",
   "Selection context, validation, audio routing, and metadata stay visible here while you work.": "Auswahlkontext, Validierung, Audio-Routing und Metadaten bleiben hier sichtbar, während du arbeitest.",
   "Choose a generated part to inspect validation status.": "Wähle eine generierte Komponente, um den Validierungsstatus zu prüfen.",
@@ -101,7 +89,6 @@
   "External live data changed. Reload the workspace before making new edits.": "Externe Live-Daten geändert. Lade den Arbeitsbereich neu, bevor du neue Bearbeitungen vornimmst.",
   "Choose a generated part from the left rail or create one from a curated donor template.": "Wähle eine generierte Komponente aus der linken Leiste oder erstelle eine aus einer kuratierten Spender-Vorlage.",
   "No document selected. Use the navigator to inspect a generated part or start a new asset flow.": "Kein Dokument ausgewählt. Verwende den Navigator, um eine generierte Komponente zu prüfen oder einen neuen Asset-Fluss zu starten.",
-
   "Overview": "Übersicht",
   "Properties": "Eigenschaften",
   "Curve": "Kurve",
@@ -109,7 +96,6 @@
   "Audio": "Audio",
   "Metadata": "Metadaten",
   "Activity": "Aktivität",
-
   "TORQUE CURVE": "DREHMOMENT-KURVE",
   "Curve Preview": "Kurven-Vorschau",
   "Open the Curve tab to render torque data.": "Öffne den Kurven-Tab, um Drehmoment-Daten anzuzeigen.",
@@ -119,7 +105,6 @@
   "Torque Curve": "Drehmoment-Kurve",
   "Search commands, navigation actions, and pack workflows.": "Suche Befehle, Navigationsaktionen und Pack-Workflows.",
   "Type a command or shortcut": "Gib einen Befehl oder eine Verknüpfung ein",
-
   "Customize Frog Mod Editor": "Frog Mod Editor anpassen",
   "Customize": "Anpassen",
   "Adjust appearance, scale, and language. Changes apply immediately — close the dialog to confirm or click Cancel to revert.": "Passe Darstellung, Skalierung und Sprache an. Änderungen werden sofort angewendet — schließe den Dialog, um zu bestätigen, oder klicke auf Abbrechen, um rückgängig zu machen.",
@@ -141,7 +126,6 @@
   "Preferred interface language. Note: only English is currently translated. Selecting another language saves your preference but the UI stays in English until translation packs are added in a future update.": "Bevorzugte Oberflächensprache. Hinweis: Derzeit sind nur Englisch und Spanisch übersetzt. Die Auswahl einer anderen Sprache speichert deine Vorliebe, aber die Benutzeroberfläche bleibt auf Englisch, bis Übersetzungspakete in einem zukünftigen Update hinzugefügt werden.",
   "Restart Required": "Neustart erforderlich",
   "Language preference saved. Please restart Frog Mod Editor for the new language to take effect throughout the interface.": "Spracheinstellung gespeichert. Bitte starte Frog Mod Editor neu, damit die neue Sprache in der gesamten Benutzeroberfläche wirksam wird.",
-
   "POLICY EDITOR": "RICHTLINIEN-EDITOR",
   "Town Policy Editor": "Städtischer Richtlinien-Editor",
   "Edit existing policy costs and effect values, or add new policies using the available effect types. Changes are staged into the mod and included when you Pack Mod.": "Bearbeite vorhandene Richtlinienkosten und Effektwerte oder füge neue Richtlinien mit den verfügbaren Effekttypen hinzu. Änderungen werden im Mod bereitgestellt und beim Packen des Mods eingebunden.",
@@ -176,7 +160,6 @@
   "Reset Policies": "Richtlinien zurücksetzen",
   "Remove all policy modifications and revert to vanilla values?": "Alle Richtlinienänderungen entfernen und zu Vanilla-Werten zurückkehren?",
   "Policies reset to vanilla.": "Richtlinien auf Vanilla zurückgesetzt.",
-
   "UNPACKED GAME FILES": "ENTPACKTE SPIELDATEIEN",
   "Not set": "Nicht gesetzt",
   "Select Unpacked Folder": "Entpackte Ordner auswählen",
@@ -207,7 +190,6 @@
   "Name must contain only letters, numbers, and underscores.": "Der Name darf nur Buchstaben, Zahlen und Unterstriche enthalten.",
   "Created '{name}' — shift time {shift:.2f}s ({pct:+.1f}% from vanilla {orig:.3f}s). Staged in mod tree.": "Erstellt '{name}' — Schaltzeit {shift:.2f}s ({pct:+.1f}% von Vanilla {orig:.3f}s). Im Mod-Baum bereitgestellt.",
   "Error creating transmission: {err}": "Fehler beim Erstellen des Getriebes: {err}",
-
   "Zoom in (mouse wheel up)": "Vergrößern (Mausrad nach oben)",
   "Zoom out (mouse wheel down)": "Verkleinern (Mausrad nach unten)",
   "Fit to view (keyboard: 0)": "An Ansicht anpassen (Tastatur: 0)",
@@ -246,7 +228,6 @@
   "Text Files (*.txt);;JSON Files (*.json);;All Files (*)": "Textdateien (*.txt);;JSON-Dateien (*.json);;Alle Dateien (*)",
   "Saved to: {path}": "Gespeichert in: {path}",
   "Error saving: {error}": "Fehler beim Speichern: {error}",
-
   "Unpacked game files not found. Select the folder containing the unpacked Motor Town files (with MotorTown/Config/ inside) to enable economy editing.": "Entpackte Spieldateien nicht gefunden. Wähle den Ordner mit den entpackten Motor Town Dateien (mit MotorTown/Config/ darin) aus, um die Wirtschaftsbearbeitung zu aktivieren.",
   "ECONOMY EDITOR": "WIRTSCHAFTS-EDITOR",
   "Game Economy & Payment Multipliers": "Spiel-Wirtschaft & Zahlungs-Multiplikatoren",
@@ -305,7 +286,6 @@
   "Applied: Economy {economy}, Bus {bus}, Taxi {taxi}, Amb {amb}, Fuel {fuel}, Veh {veh}": "Angewendet: Wirtschaft {economy}, Bus {bus}, Taxi {taxi}, Amb {amb}, Kraftstoff {fuel}, Fhz {veh}",
   "Error applying settings: {error}": "Fehler beim Anwenden der Einstellungen: {error}",
   "Reset to vanilla values. Economy mod files removed.": "Auf Vanilla-Werte zurückgesetzt. Wirtschafts-Mod-Dateien entfernt.",
-
   "+ Add condition": "+ Bedingung hinzufügen",
   "@": "@",
   "Engine Unlock Requirements": "Motorfreischaltungs-Anforderungen",
@@ -322,7 +302,6 @@
   "Vehicle Compatibility": "Fahrzeugkompatibilität",
   "Vehicle Type": "Fahrzeugtyp",
   "Volume Adjustment": "Lautstärkeanpassung",
-
   "Some inputs are out of the safe range and would crash or freeze the game in-game. Fix these before saving:\n\n{body}": "Einige Eingaben sind außerhalb des sicheren Bereichs und würden das Spiel zum Absturz bringen oder einfrieren. Behebe diese vor dem Speichern:\n\n{body}",
   "Some inputs are outside their typical range. They are allowed but may produce unexpected behaviour. Save anyway?\n\n{body}": "Einige Eingaben sind außerhalb ihres typischen Bereichs. Sie sind zulässig, können aber zu unerwartetem Verhalten führen. Trotzdem speichern?\n\n{body}",
   "Create": "Erstellen",
@@ -395,7 +374,6 @@
   "Live data changed before the tire was created.": "Live-Daten änderten sich, bevor der Reifen erstellt wurde.",
   "Create tire failed.": "Reifen-Erstellung fehlgeschlagen.",
   "Creating tire...": "Reifen wird erstellt…",
-
   "Lua Mods — Please Read": "Lua-Mods — Bitte lesen",
   "IMPORTANT — PLEASE READ": "WICHTIG — BITTE LESEN",
   "Everything on the Lua Mods tab depends on UE4SS. If you haven't installed UE4SS yet, the mods you generate will not load. Take a minute to read this before deploying.": "Alles auf dem Lua-Mods-Tab hängt von UE4SS ab. Wenn du UE4SS noch nicht installiert hast, laden die generierten Mods nicht. Nimm dir eine Minute Zeit, um dies vor der Bereitstellung zu lesen.",
@@ -426,7 +404,6 @@
   "deployed to": "bereitgestellt in",
   "unknown error": "unbekannter Fehler",
   "deploy failed: {error}": "Bereitstellung fehlgeschlagen: {error}",
-
   "AfterFire Probability": "Nachfeuer-Wahrscheinlichkeit",
   "Base fuel-use scalar. Higher values = more fuel consumed for a given power output. Vanilla range: 3 (scooter) to 670 (Electric 670 HP — yes, EVs use this too for energy drain). Typical gas engines: 90–320, roughly correlating with HP. Diesels: 260–540. The editor warns outside 3–700 and blocks above 10,000. Must be greater than zero or the engine won't consume fuel at all.": "Basis-Kraftstoffverbrauch-Skalar. Höhere Werte = höherer Kraftstoffverbrauch für eine bestimmte Leistung. Vanilla-Bereich: 3 (Roller) bis 670 (Elektro 670 PS — ja, EVs nutzen dies auch für Energieentladung). Typische Benzinmotoren: 90–320, grob korrelierend mit PS. Dieselmotoren: 260–540. Der Editor warnt außerhalb von 3–700 und blockiert über 10.000. Muss größer als null sein, sonst verbraucht der Motor gar keinen Kraftstoff.",
   "Browse vanilla transmissions, modify shift time, and create upgraded variants.": "Durchsuche Vanilla-Getriebe, ändere Schaltzeit und erstelle verbesserte Varianten.",
@@ -520,5 +497,14 @@
   "Wear Rate": "Verschleißrate",
   "Wear Rate 2": "Verschleißrate 2",
   "Wear and Thermal": "Verschleiß und Wärme",
-  "{count} parts ready  •  {engines} engines  •  {tires} tires": "{count} Komponenten bereit  •  {engines} Motoren  •  {tires} Reifen"
+  "{count} parts ready  •  {engines} engines  •  {tires} tires": "{count} Komponenten bereit  •  {engines} Motoren  •  {tires} Reifen",
+  "Output Folders": "Ausgabeordner",
+  "Optional. Set these to write generated mods directly into your Motor Town install instead of copy-pasting them by hand. Leave blank to keep the historical behaviour (save dialog for .paks, lua_mod_output/ for Lua mods).": "Optional. Diese setzen, damit generierte Mods direkt in deine Motor-Town-Installation geschrieben werden, statt sie manuell zu kopieren. Leer lassen, um das bisherige Verhalten beizubehalten (Speichern-Dialog für .paks, lua_mod_output/ für Lua-Mods).",
+  ".pak export folder (typical: <Motor Town>/MotorTown/Content/Paks/~mods/)": ".pak-Exportordner (typisch: <Motor Town>/MotorTown/Content/Paks/~mods/)",
+  "Lua mods deployment folder (typical: <Motor Town>/MotorTown/Binaries/Win64/ue4ss/Mods/)": "Lua-Mods-Bereitstellungsordner (typisch: <Motor Town>/MotorTown/Binaries/Win64/ue4ss/Mods/)",
+  "(not set — using default)": "(nicht gesetzt — Standard wird verwendet)",
+  "Browse…": "Durchsuchen…",
+  "Clear": "Löschen",
+  "Choose .pak export folder": ".pak-Exportordner auswählen",
+  "Choose Lua mods deployment folder": "Lua-Mods-Bereitstellungsordner auswählen"
 }

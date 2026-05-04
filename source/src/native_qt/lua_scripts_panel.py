@@ -1008,6 +1008,23 @@ class LuaScriptsPanel(QtWidgets.QWidget):
     # ------------------------------------------------------------------
     # Deploy flow
     # ------------------------------------------------------------------
+    def _resolve_output_dir(self) -> str:
+        """Return the deploy target dir. If the user set a custom Lua
+        deployment folder via File > Customize and it exists, use it
+        — that's the "no copy-paste" path that lands the mod folders
+        directly in <Motor Town>/Binaries/Win64/ue4ss/Mods/. Falls
+        back to the bundled DEFAULT_OUTPUT_DIR (source/data/lua_mod_output/)
+        if the setting is empty or the folder is missing."""
+        try:
+            from customize_settings import load as _load_cs
+            cfg = _load_cs()
+            override = (cfg.get('lua_output_dir') or '').strip()
+            if override and os.path.isdir(override):
+                return override
+        except Exception:
+            pass
+        return DEFAULT_OUTPUT_DIR
+
     def _on_deploy_single(self, mod_name: str) -> None:
         card = self._cards.get(mod_name)
         if not card:
@@ -1015,7 +1032,8 @@ class LuaScriptsPanel(QtWidgets.QWidget):
         deployer = next((d for d in all_deployers() if d.MOD_NAME == mod_name), None)
         if not deployer:
             return
-        result = deployer.deploy(card.config())
+        out_dir = self._resolve_output_dir()
+        result = deployer.deploy(card.config(), output_dir=out_dir)
         self._apply_result_to_card(card, result)
         self._save_to_disk()
         self.mods_deployed.emit({mod_name: result})
@@ -1028,6 +1046,7 @@ class LuaScriptsPanel(QtWidgets.QWidget):
             )
             return
 
+        out_dir = self._resolve_output_dir()
         results: Dict[str, Any] = {}
         for mod_name, card in enabled:
             deployer = next(
@@ -1036,7 +1055,7 @@ class LuaScriptsPanel(QtWidgets.QWidget):
             if not deployer:
                 continue
             try:
-                r = deployer.deploy(card.config())
+                r = deployer.deploy(card.config(), output_dir=out_dir)
             except Exception as e:
                 r = {'success': False, 'error': str(e)}
             results[mod_name] = r
@@ -1045,8 +1064,10 @@ class LuaScriptsPanel(QtWidgets.QWidget):
         # Also write a mods.txt listing every mod that deployed
         # successfully — users can drop it straight into ue4ss/Mods/
         # alongside the mod folders for a working UE4SS config.
+        # When the output dir is the user-configured Mods folder, the
+        # mods.txt lands right next to it — no copy needed.
         successful = [n for n, r in results.items() if r.get('success')]
-        mods_txt_result = write_mods_txt(successful, DEFAULT_OUTPUT_DIR)
+        mods_txt_result = write_mods_txt(successful, out_dir)
 
         # Summary
         ok = successful
@@ -1116,7 +1137,7 @@ class LuaScriptsPanel(QtWidgets.QWidget):
 
     def _on_status_link(self, href: str) -> None:
         if href == 'open-output':
-            _open_in_file_manager(DEFAULT_OUTPUT_DIR)
+            _open_in_file_manager(self._resolve_output_dir())
         elif href.startswith('open:'):
             mod_name = href.split(':', 1)[1]
             path = self._last_output_paths.get(mod_name)
