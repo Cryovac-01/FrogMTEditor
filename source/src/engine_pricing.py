@@ -6,10 +6,72 @@ from dataclasses import dataclass
 from typing import Iterable, Sequence
 
 
-REFERENCE_PRICE_ENGINE = 'V12_789HP'
+REFERENCE_PRICE_ENGINE = 'Bus_300HP'
 REFERENCE_PRICE = 20000
 MIN_ENGINE_PRICE = 1000
 MAX_ENGINE_PRICE = 100000
+
+
+# Vanilla-shaped engine corpus used when no template engines are
+# loaded (the v7 cleanup removed the 219 default templates, so the
+# price recommender has no other corpus to build a curve from). The
+# torque numbers match the magnitudes seen in vanilla Motor Town
+# engine layouts grouped by variant — they're not copies of the
+# game's exact internal values, just realistic anchors for the
+# weighted-percentile pricing algorithm.
+@dataclass(frozen=True)
+class _FallbackSpec:
+    name: str
+    torque_nm: float
+    variant: str
+
+
+_VANILLA_FALLBACK_SPECS = (
+    # Bikes (single-cylinder + i4 supersport, low torque, high rev)
+    _FallbackSpec('Bike_30HP',       25.0, 'bike'),
+    _FallbackSpec('Bike_50HP',       40.0, 'bike'),
+    _FallbackSpec('Bike_100HP',      80.0, 'bike'),
+    _FallbackSpec('Bike_i4_100HP',   70.0, 'bike'),
+    _FallbackSpec('Bike_i4_160HP',  110.0, 'bike'),
+    # Compact + entry-level ICE cars
+    _FallbackSpec('ICE_Compact_90HP',  130.0, 'ice'),
+    _FallbackSpec('ICE_Compact_150HP', 220.0, 'ice'),
+    _FallbackSpec('ICE_Standard_200HP', 280.0, 'ice'),
+    # Mid + V6 sedans
+    _FallbackSpec('ICE_V6_250HP',  330.0, 'ice'),
+    _FallbackSpec('ICE_V6_300HP',  400.0, 'ice'),
+    _FallbackSpec('Ford_V8_5L_140HP', 320.0, 'ice'),
+    # Performance / V8s
+    _FallbackSpec('ICE_V8_250HP',  380.0, 'ice'),
+    _FallbackSpec('ICE_V8_450HP',  550.0, 'ice'),
+    _FallbackSpec('ICE_V8_550HP',  680.0, 'ice'),
+    _FallbackSpec('ICE_V8_700HP',  800.0, 'ice'),
+    _FallbackSpec('Ferrari_V12_400HP', 410.0, 'ice'),
+    _FallbackSpec('V12_789HP',     820.0, 'ice'),
+    # Diesel pickups + heavy-duty
+    _FallbackSpec('Diesel_240HP',  800.0, 'diesel'),
+    _FallbackSpec('Diesel_350HP', 1300.0, 'diesel'),
+    _FallbackSpec('Diesel_HD_500HP', 2400.0, 'diesel'),
+    # Buses (heavy-duty diesel, very high torque)
+    _FallbackSpec('Bus_140HP',  540.0, 'diesel'),
+    _FallbackSpec('Bus_230HP',  900.0, 'diesel'),
+    _FallbackSpec('Bus_300HP', 1200.0, 'diesel'),  # ← reference anchor
+    _FallbackSpec('Bus_400HP', 1600.0, 'diesel'),
+    # Electric (instant torque)
+    _FallbackSpec('Electric_130HP',  280.0, 'ev'),
+    _FallbackSpec('Electric_300HP',  600.0, 'ev'),
+    _FallbackSpec('Electric_670HP', 1100.0, 'ev'),
+)
+
+
+def vanilla_fallback_specs(include_bikes: bool = False) -> tuple:
+    """Return the built-in vanilla-shaped engine corpus, optionally
+    excluding bikes (the create-engine UI filters bikes out unless
+    the user is building a bike-variant engine, mirroring how the
+    template specs path used to behave)."""
+    if include_bikes:
+        return _VANILLA_FALLBACK_SPECS
+    return tuple(s for s in _VANILLA_FALLBACK_SPECS if s.variant != 'bike')
 
 
 @dataclass(frozen=True)

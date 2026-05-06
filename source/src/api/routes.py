@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 import urllib.parse
 
-from engine_pricing import build_torque_price_model, recommend_price_from_torque
+from engine_pricing import (
+    build_torque_price_model,
+    recommend_price_from_torque,
+    vanilla_fallback_specs,
+)
 from parsers.uasset import parse_uasset
 from parsers.uexp_engine import (
     ENGINE_CANONICAL_PROPERTY_ORDER,
@@ -1237,7 +1241,16 @@ def _find_donor_row_by_name(ua: bytes, ue: bytes, target_name: str) -> Optional[
 
 
 def _get_template_price_model(include_bikes: bool = False):
-    """Return the cached weighted torque-price model for template engines."""
+    """Return the cached weighted torque-price model for template engines.
+
+    Falls back to the built-in vanilla-shaped corpus
+    (engine_pricing.vanilla_fallback_specs) when the templates dir is
+    empty — which is the v7+ default since the 219 unrealistic default
+    templates were removed. Without the fallback, build_torque_price_model
+    would raise "Cannot build a price model without template specs"
+    and the Recommend Price button in the engine creator would error
+    out instead of producing a number.
+    """
     template_files, stamp = _template_engine_files_and_stamp()
     cache_key = (include_bikes, stamp[0], stamp[1])
 
@@ -1249,6 +1262,11 @@ def _get_template_price_model(include_bikes: bool = False):
     specs = load_template_specs(TEMPLATES_ENGINE_DIR, ENGINE_DISPLAY_NAMES)
     if not include_bikes:
         specs = [spec for spec in specs if spec.variant != 'bike']
+
+    if not specs:
+        # No templates installed — build the model from the bundled
+        # vanilla-shaped corpus instead.
+        specs = list(vanilla_fallback_specs(include_bikes=include_bikes))
 
     model = build_torque_price_model(specs)
     _ENGINE_PRICE_MODEL_CACHE[cache_key] = model
