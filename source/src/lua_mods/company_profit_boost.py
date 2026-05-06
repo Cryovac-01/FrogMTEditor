@@ -266,24 +266,23 @@ local function RefreshOwnedCompanies()
         if ownerGuidField then
             -- Field name worked but no companies matched the local
             -- player's character GUID — they don't own any company yet.
+            -- The boost won't fire until the player founds one.
             Log("No owned companies (matched field: " .. ownerGuidField
-                .. ") — found a player but no company they own. "
-                .. "Will fall back to local-controller match on hook fire.")
+                .. "). Boost will not fire until the player founds a "
+                .. "company. Re-scan happens every 30s.")
         else
-            -- Every candidate field returned nil. This MT build doesn't
-            -- expose the company-owner GUID under any name we know
-            -- about. We fall back to a controller-match heuristic at
-            -- hook time: if the RPC's `self` is the local player's
-            -- controller, we boost. That's correct in single-player
-            -- and accurate enough for self-hosting (the host's own
-            -- deliveries get boosted, no one else's), and degrades
-            -- to no-op on a dedicated server with no local player.
+            -- Every candidate field returned nil. We can't safely scope
+            -- the boost to "MY company's vehicles" without knowing what
+            -- companies the player owns. Stay idle rather than fall
+            -- back to "boost everyone" — that's the old INI-wide
+            -- behaviour we were specifically replacing.
             Log("MTCompany owner-GUID field not exposed on this build. "
-                .. "Falling back to local-controller match: deliveries "
-                .. "made by the local player are boosted; deliveries "
-                .. "from other players on the same server are not. "
-                .. "Single-player + self-host work correctly. Dedicated "
-                .. "servers with no local player will not boost anything.")
+                .. "Boost cannot fire (we won't fall back to boosting "
+                .. "every company's vehicles indiscriminately — that "
+                .. "was the v6 INI-wide behaviour this mod replaces). "
+                .. "Use UE4SS Live View on MTCompany to find the real "
+                .. "owner-character field name and report it so we can "
+                .. "add it to OWNER_GUID_CANDIDATES.")
         end
     end
 end
@@ -298,17 +297,6 @@ local function IsOwnedByMyCompany(vehicle)
         end
     end
     return false, nil
-end
-
--- Fallback ownership check used when MTCompany discovery fails.
--- Compares the hook's `self` PlayerController to the local player's
--- controller — if they match, the RPC was triggered by the local
--- player's own delivery, so the boost is correct to apply. This
--- bypasses MTCompany entirely.
-local function IsHookCallerLocalPlayer(hookSelf)
-    if not hookSelf then return false end
-    local ok, isLocal = pcall(function() return hookSelf:IsLocalController() end)
-    return ok and isLocal == true
 end
 
 -- ============================================================
