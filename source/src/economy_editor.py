@@ -684,6 +684,12 @@ def load_economy_settings() -> Dict[str, Any]:
         'capacity_scaling_mode': 'Vanilla',
         'profit_share': '5% (Vanilla)',
         'profit_share_multiplier': 1.0,
+        # When True, apply_all_economy_settings copies + patches every
+        # Buildings* .uexp from the unpacked vanilla tree into the mod
+        # tree with all construction-cargo quantities zeroed. The Pack
+        # Mod flow picks them up automatically and includes them in
+        # the .pak. Replaces the unreliable runtime-Lua approach.
+        'free_buildings': False,
         'custom_cargo_overrides': {},
         'custom_ini_overrides': {},
     }
@@ -847,6 +853,32 @@ def apply_all_economy_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
             results['profit_share'] = 'no-op (not set)'
     except Exception as e:
         results['profit_share'] = f'error: {e}'
+
+    # 5. Free building construction (zero-cost depots/garages via
+    # patched Buildings DataTable). Replaces the unreliable Lua mod.
+    try:
+        if settings.get('free_buildings'):
+            from parsers.uexp_buildings_dt import deploy_free_construction
+            # Derive the unpacked root from the cached vanilla balance
+            # path: it's typically <root>/MotorTown/Config/DefaultMotorTownBalance.ini,
+            # so the root is two parents up.
+            unpacked_root = None
+            if _vanilla_balance_ini:
+                unpacked_root = os.path.dirname(os.path.dirname(
+                    os.path.dirname(_vanilla_balance_ini)
+                ))
+            if not unpacked_root or not os.path.isdir(unpacked_root):
+                results['free_buildings'] = (
+                    "error: unpacked game folder not set; "
+                    "click 'Select Unpacked Folder' in the Economy panel."
+                )
+            else:
+                fb_result = deploy_free_construction(unpacked_root, MOD_ROOT)
+                results['free_buildings'] = fb_result
+        else:
+            results['free_buildings'] = 'disabled'
+    except Exception as e:
+        results['free_buildings'] = f'error: {e}'
 
     # 5. Save settings for next session
     save_economy_settings(settings)
