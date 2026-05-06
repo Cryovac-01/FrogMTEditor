@@ -254,7 +254,13 @@ Log("=== Cryovac Free Depot Construction Loaded ===")
 
 
 def generate_main_lua(config: Dict[str, Any]) -> str:
-    return _MAIN_LUA_TEMPLATE
+    # The template uses {{ and }} as Python str.format escapes for
+    # literal Lua braces, so we MUST run it through .format() even
+    # though there are no substitutions — otherwise the rendered
+    # Lua contains stray double-braces which corrupt the parser
+    # and make every API call (ExecuteWithDelay, LoopAsync, ...)
+    # look malformed at runtime.
+    return _MAIN_LUA_TEMPLATE.format()
 
 
 def generate_readme(config: Dict[str, Any]) -> str:
