@@ -265,68 +265,12 @@ class EconomyEditorPanel(QtWidgets.QWidget):
             card = self._build_slider_card(eyebrow, title, desc, key)
             scroll_layout.addWidget(card)
 
-        # -- Free Building Construction (depot/garage zero-cost) ----
-        # This patches Buildings_Houses.uexp on apply: every cargo
-        # quantity in the construction-step arrays gets zeroed, so
-        # placing a depot/garage construction site completes the
-        # moment you put it down. The patched DT is written into the
-        # mod tree and packed automatically by Pack Mod.
-        building_card = QtWidgets.QFrame()
-        building_card.setStyleSheet(f"""
-            QFrame {{
-                background: {_SURFACE};
-                border: 1px solid {_BORDER};
-                border-radius: 8px;
-            }}
-        """)
-        bl = QtWidgets.QVBoxLayout(building_card)
-        bl.setContentsMargins(20, 16, 20, 16)
-        bl.setSpacing(8)
-        bl.addWidget(_label(_t("BUILDING CONSTRUCTION"), "eyebrow"))
-        bl.addWidget(_label(_t("Free Depot / Garage / House Construction"), "section"))
-        bl.addWidget(_label(_t(
-            "Patches the Buildings DataTable so every construction "
-            "requirement drops to <b>1 unit</b>. Place a depot or "
-            "garage construction site, deliver one of each material "
-            "shown (5 trivial deliveries from any industrial pickup), "
-            "and the building completes.\n\n"
-            "Why one of each instead of zero: Motor Town's "
-            "construction state machine advances on delivery events. "
-            "If every requirement is set to 0, no delivery can fire "
-            "(the slot is already full at 0/0), so the completion "
-            "event never triggers and the construction site stays "
-            "stuck in 'in progress' forever. Leaving a token of 1 on "
-            "every cargo type satisfies each step the moment the "
-            "player makes the corresponding delivery, regardless of "
-            "how many steps the building uses.\n\n"
-            "The patched .uasset/.uexp files are written into the mod "
-            "tree and packed automatically when you click Pack Mod. "
-            "This feature ships with bundled vanilla data — no "
-            "unpacked Motor Town folder is required."
-        ), "muted"))
-        self.free_buildings_cb = QtWidgets.QCheckBox(
-            _t("Enable near-free construction (Depots, Garages — 1 unit of each material)")
-        )
-        self.free_buildings_cb.setStyleSheet(f"""
-            QCheckBox {{
-                color: {_TEXT};
-                font-size: 13px;
-                spacing: 8px;
-                padding: 4px 0;
-            }}
-            QCheckBox::indicator {{
-                width: 18px; height: 18px;
-                border: 1px solid {_BORDER};
-                border-radius: 3px;
-                background: {_CARD};
-            }}
-            QCheckBox::indicator:checked {{
-                background: {_ACCENT};
-                border-color: {_ACCENT};
-            }}
-        """)
-        bl.addWidget(self.free_buildings_cb)
-        scroll_layout.addWidget(building_card)
+        # The "Free Building Construction" toggle that lived here in
+        # v7.2.x has been removed — the DataTable approach didn't work
+        # because zeroing requirements left construction stuck and
+        # token-cargo costs still required multi-step production
+        # chains. The functionality lives on the LUA Scripts tab now
+        # as CryovacFreeDepotConstruction (runtime force-complete).
 
         # -- Vehicle Owner Profit Share (with caveats) ---------------
         # This writes VehicleOwnerProfitShare in the balance INI and
@@ -690,12 +634,6 @@ class EconomyEditorPanel(QtWidgets.QWidget):
             saved_profit = 1.0
         self._set_slider_value('profit_share', saved_profit)
 
-        # Free Building Construction toggle
-        try:
-            self.free_buildings_cb.setChecked(bool(settings.get('free_buildings', False)))
-        except Exception:
-            pass
-
         # Load any saved custom overrides
         self._custom_cargo_values = dict(settings.get('custom_cargo_overrides', {}))
         self._custom_ini_values = dict(settings.get('custom_ini_overrides', {}))
@@ -932,9 +870,6 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         # Profit share multiplier — applies globally per vehicle class
         # (see warning under the slider in the UI).
         settings['profit_share_multiplier'] = self._get_slider_value('profit_share')
-        # Free building construction (zero-cost depots/garages via
-        # patched Buildings DataTable).
-        settings['free_buildings'] = self.free_buildings_cb.isChecked()
 
         # Check if vanilla paths are set before applying.
         # Free Building Construction ships with bundled vanilla data —

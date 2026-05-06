@@ -2800,39 +2800,16 @@ def pack_mod(output_path: str = '', parts_to_include: List[str] = None) -> Dict:
         for _cj in _glob.glob(os.path.join(pack_source, '**', '*.creation.json'), recursive=True):
             os.remove(_cj)
 
-        # Always re-run the Free Building Construction patch into the
-        # staged tree if the toggle is enabled. This makes the editor
-        # self-correcting after upgrades — the user doesn't have to
-        # remember to click Apply Economy Settings between releases.
-        # Reads the (current) bundled vanilla Buildings_Houses, applies
-        # the latest patcher, writes into the temp staging dir so the
-        # newly-generated pak always reflects the current code.
-        try:
-            from economy_editor import load_economy_settings
-            from parsers.uexp_buildings_dt import deploy_free_construction
-            _eco_cfg = load_economy_settings()
-            if _eco_cfg.get('free_buildings'):
-                # Stage at the temp pack root (parent of pack_source), so
-                # paths like MotorTown/Content/DataAsset/Buildings/...
-                # land alongside the rest of the staged tree.
-                _staging_root = os.path.dirname(pack_source)
-                _fb_result = deploy_free_construction(
-                    unpacked_root='', mod_tree_root=_staging_root
-                )
-                if not _fb_result.get('success'):
-                    return {
-                        'error': (
-                            'Free Building Construction patch failed at '
-                            'pack time: ' + str(_fb_result.get('error', '?'))
-                        )
-                    }
-        except Exception as _fb_err:
-            return {
-                'error': (
-                    f'Free Building Construction patch failed at '
-                    f'pack time: {_fb_err}'
-                )
-            }
+        # Free Building Construction's v7.2.x DataTable approach was
+        # removed in v7.3 — see free_depot_construction.py for the
+        # runtime-Lua replacement. Make sure no stale Buildings_Houses
+        # patches survive in the temp pack tree (would otherwise ship
+        # a stuck-construction mod by accident).
+        _stale_dt = os.path.join(
+            pack_source, 'Content', 'DataAsset', 'Buildings'
+        )
+        if os.path.isdir(_stale_dt):
+            shutil.rmtree(_stale_dt, ignore_errors=True)
 
         # Keep Config/ in the pak (the game reads some INI fields from it)
         # AND also deploy as a loose file below (some fields need that).

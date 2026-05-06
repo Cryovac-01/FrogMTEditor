@@ -134,12 +134,14 @@ def _ensure_loaded() -> None:
     from . import engine_volume                 # noqa: F401
     from . import production_storage_boost      # noqa: F401
     from . import contract_payment_boost        # noqa: F401
-    # free_depot_construction retired in v7.1: the runtime-Lua DT
-    # rewrite couldn't locate the right step/requirements field
-    # shape on Buildings_Houses on this build, and a .pak version
-    # would require a Buildings DataTable parser + repack we
-    # haven't built. Users wanting zero-cost depots should use a
-    # Nexus pak mod for now.
+    # free_depot_construction re-enabled in v7.3 with a completely
+    # different strategy: instead of modifying the Buildings DT
+    # (which leaves the construction state machine stuck or forces
+    # multi-step-cargo deliveries), it scans for placed
+    # construction-site actors and force-completes them via
+    # candidate completion methods. See free_depot_construction.py
+    # docstring for details.
+    from . import free_depot_construction       # noqa: F401
 
 
 # Shared default output directory. Mirrors what cargo_scaling_deployer used

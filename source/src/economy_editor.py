@@ -860,32 +860,15 @@ def apply_all_economy_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         results['profit_share'] = f'error: {e}'
 
-    # 5. Free building construction (zero-cost depots/garages via
-    # patched Buildings DataTable). Replaces the unreliable Lua mod.
-    # The editor bundles vanilla Buildings_Houses.uasset/.uexp under
-    # data/vanilla/Buildings/, so this feature works WITHOUT an
-    # unpacked Motor Town folder. If the bundled files are missing
-    # from a stripped-down install, the deploy falls back to the
-    # user's unpacked folder (derived from the balance INI path).
-    try:
-        if settings.get('free_buildings'):
-            from parsers.uexp_buildings_dt import deploy_free_construction
-            # Optional fallback: derive unpacked_root from the cached
-            # vanilla balance INI path (two parents up). Only used if
-            # the bundled vanilla Buildings copy is missing.
-            unpacked_root = ''
-            if _vanilla_balance_ini:
-                derived = os.path.dirname(os.path.dirname(
-                    os.path.dirname(_vanilla_balance_ini)
-                ))
-                if os.path.isdir(derived):
-                    unpacked_root = derived
-            fb_result = deploy_free_construction(unpacked_root, MOD_ROOT)
-            results['free_buildings'] = fb_result
-        else:
-            results['free_buildings'] = 'disabled'
-    except Exception as e:
-        results['free_buildings'] = f'error: {e}'
+    # 5. Free building construction was a v7.2.x experiment that
+    # tried to patch the Buildings DataTable. Removed in v7.3
+    # because (a) all-zero costs left construction stuck (no
+    # delivery → no completion event), (b) token costs still
+    # required multi-step cargoes. The functionality moved to
+    # CryovacFreeDepotConstruction (Lua mod) which force-completes
+    # placed construction-site actors at runtime. Legacy
+    # 'free_buildings' setting values are ignored.
+    results['free_buildings'] = 'moved to CryovacFreeDepotConstruction Lua mod'
 
     # 5. Save settings for next session
     save_economy_settings(settings)

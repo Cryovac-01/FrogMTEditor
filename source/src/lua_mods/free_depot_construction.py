@@ -1,23 +1,49 @@
-"""Cryovac Free Depot Construction — zeroes out the material cost
-to build any depot or garage.
+"""Cryovac Free Depot Construction — runtime force-complete approach.
 
-Targets the Buildings DataTable (/Game/DataAsset/Buildings/Buildings).
-For each row whose name contains ``Depot`` or ``Garage``, walks
-``Steps[]`` and sets every value in each step's ``Materials`` TMap
-to 0. The construction site then accepts the empty delivery and the
-building completes the moment you place it.
+Earlier versions tried to modify the Buildings_Houses DataTable to
+zero (or near-zero) the construction-cost arrays. That ran into two
+unsolvable problems:
 
-No user-configurable knobs — this is a binary toggle. Deploy the mod
-to enable; remove the folder (or set ``enabled.txt: 0`` in your
-``mods.txt``) to disable.
+  1. With requirements at 0, MT's construction state machine never
+     fires its completion event (no delivery → no event → stuck).
+  2. With requirements at 1 unit per cargo, the player still has to
+     produce one of every cargo type — and several of those (Plastic
+     Pipes, H-Beam, Concrete) require multi-step production chains.
+     That defeats the purpose of "free construction".
 
-Two-stage application
----------------------
-The Buildings DataTable isn't loaded at game start; it streams in
-when the player approaches a build menu. The mod uses the same
-``ExecuteWithDelay`` + ``LoopAsync`` pattern as ``CryovacCargoScaling``
-to retry every 5 seconds until the table is reachable, then stop
-once successful.
+The right angle is to leave the DataTable vanilla and modify the
+*placed construction site actor* at runtime. The construction screen
+still shows the normal materials list, but the actor's internal
+"completion" check fires immediately because the mod sets its
+delivered-amount fields equal to its required-amount fields (or
+calls a Complete method directly) the moment it's placed.
+
+Approach
+--------
+Periodically scans for placed construction-site actors via FindAllOf
+and tries a list of candidate methods/fields to advance them to the
+"completed" state. The candidate list covers every reasonable UE5
+naming convention for delivery completion / construction finish on
+MT's likely class hierarchy:
+
+  - call <Site>:CompleteConstruction()      (most likely method name)
+  - call <Site>:ServerCompleteConstruction() (server-side variant)
+  - call <Site>:OnAllMaterialsDelivered()   (event-style)
+  - call <Site>:FinishConstruction()        (alternative)
+  - copy RequiredAmounts → DeliveredAmounts (state-copy fallback)
+  - set bIsCompleted/bIsConstructed = true  (flag fallback)
+
+UE4SS's pcall-wrapped property/method access fails silently for
+non-existent names, so listing every plausible candidate is safe —
+the wrong ones drop out, the right one fires and the construction
+site finishes. The mod logs which method actually worked at the
+first successful completion, so future debugging knows which combo
+was the live one on the user's MT build.
+
+If NONE of the candidates work, the mod logs a clear "no candidate
+matched" message at startup with instructions for the user to
+report the actual class/method names from UE4SS Live View so the
+candidate list can be extended.
 """
 from __future__ import annotations
 
@@ -32,17 +58,23 @@ MOD_NAME = 'CryovacFreeDepotConstruction'
 UI_TITLE = 'Free Depot Construction'
 
 UI_DESCRIPTION = (
-    "Zeroes out the material cost to build any depot or garage. After "
-    "the mod loads, placing a Depot or LargeGarage construction site "
-    "completes immediately — no cargo runs to deliver bricks, wood, "
-    "or steel.\n\n"
-    "Targets every row in the <code>/Game/DataAsset/Buildings/Buildings</code> "
-    "DataTable whose name contains <code>Depot</code> or <code>Garage</code>. "
-    "Walks each row's <code>Steps[]</code> and sets every value in "
-    "<code>Steps[i].Materials</code> (a TMap of FName -> int32) to 0.\n\n"
+    "Force-completes Depot and Large Garage construction sites the "
+    "moment they're placed. The construction screen still shows the "
+    "normal materials list, but the building skips the delivery "
+    "requirement entirely — no cargo runs needed.\n\n"
+    "Mechanism: at runtime, the mod periodically scans for placed "
+    "construction-site actors (Depot_01_Construction, Depot_02_Construction, "
+    "LargeGarage_01_Construction, etc.) and forces their state to "
+    "'completed' by trying common UE5 completion-method names "
+    "(<code>CompleteConstruction</code>, <code>ServerCompleteConstruction</code>, "
+    "<code>OnAllMaterialsDelivered</code>, etc.). Whichever name MT "
+    "actually uses on the current build wins.\n\n"
     "<b>This mod has no settings.</b> Deploy to enable; remove the "
     "folder or set <code>enabled.txt: 0</code> to disable. Houses, "
-    "furnitures, and other building types are untouched."
+    "furniture, and other building types are untouched.\n\n"
+    "Replaces the v7.2.x DataTable-modification approach, which "
+    "couldn't trigger the vanilla completion flow without forcing "
+    "the player to produce one of every multi-step cargo type."
 )
 
 # No user-configurable settings. The framework requires DEFAULT_CONFIG
@@ -52,44 +84,21 @@ SETTINGS = []  # type: ignore[var-annotated]
 
 
 _MAIN_LUA_TEMPLATE = '''--[[
-    Cryovac: Free Depot Construction
-    ================================
-    Zeroes out per-step material requirements on every Depot or
-    Garage row in the Buildings DataTable. After the mod applies,
-    placing a depot or garage construction site completes
-    immediately with no delivered materials needed.
+    Cryovac: Free Depot Construction (runtime force-complete)
+    =========================================================
+    Skips the delivery phase on Depot / Large Garage construction
+    sites. Player places one, the mod sees it on the next scan, and
+    forces it to the "completed" state via whichever of several
+    candidate completion methods the current MT build exposes.
 
-    Target DT: /Game/DataAsset/Buildings/Buildings.Buildings
-    Affected rows: row names containing "Depot" or "Garage" (case
-    insensitive, e.g. Depot_01, Depot_02, LargeGarage_01).
-
-    The DataTable streams in on demand, so the mod retries every
-    5 seconds until it can find the table. Once applied successfully
-    it stops polling.
-
-    Generated by Frog Mod Editor. No settings — this is a binary
-    toggle. Server-side mod; runs on host or dedicated. Requires UE4SS.
+    Generated by Frog Mod Editor. No settings. Server-side mod;
+    runs on host or dedicated. Requires UE4SS.
 ]]--
 
-local CONFIG = {
-    InitialDelayMs = 8000,
-    RetryIntervalMs = 5000,
-    -- Cap retries so we don't spam the log forever on builds where
-    -- the table has been renamed or removed entirely. ~1 minute of
-    -- polling is plenty — the table normally streams in within
-    -- 10–20 seconds of world load.
-    MaxRetries = 12,
-    -- Match these substrings against row names (case-insensitive).
-    -- Adding "LargeGarage" explicitly because it's the actual row
-    -- name, but the lowercase "garage" check below catches it
-    -- regardless.
-    RowNameSubstrings = { "depot", "garage" },
-    -- Substring that the DataTable's path must contain to be even
-    -- considered a candidate. Loose enough to catch renamed variants
-    -- ("Buildings", "BuildingTypes", "Building_Construction", etc.),
-    -- but specific enough to skip unrelated DTs.
-    CandidatePathSubstring = "/buildings",
-}
+local CONFIG = {{
+    InitialDelayMs = 8000,           -- wait for world load
+    ScanIntervalMs = 3000,           -- how often we look for new sites
+}}
 
 local function Log(msg) print("[CryovacFreeDepotConstruction] " .. msg) end
 
@@ -99,303 +108,145 @@ local function SafeGet(obj, prop)
     return nil
 end
 
-local function MatchesRow(rowNameStr)
-    local lower = string.lower(rowNameStr)
-    for _, needle in ipairs(CONFIG.RowNameSubstrings) do
-        if string.find(lower, needle, 1, true) then return true end
-    end
-    return false
+-- Class names to look for via FindAllOf. Specific blueprint
+-- subclasses come first (cheap reject of non-matches); we also
+-- include candidate base classes in case future MT builds rename
+-- the specific subclasses.
+local CLASS_CANDIDATES = {{
+    "Depot_01_Construction_C",
+    "Depot_02_Construction_C",
+    "LargeGarage_01_Construction_C",
+    "Garage_01_Construction_C",
+    -- Possible base classes
+    "MTBuildingConstruction_C",
+    "MTBuildingConstruction",
+    "MTConstructionSite",
+    "BP_BuildingConstruction_Base_C",
+}}
+
+-- Methods we'll try calling (in order) to force completion.
+local COMPLETE_METHOD_CANDIDATES = {{
+    "CompleteConstruction",
+    "ServerCompleteConstruction",
+    "OnAllMaterialsDelivered",
+    "OnConstructionCompleted",
+    "FinishConstruction",
+    "Complete",
+    "Finish",
+}}
+
+-- Boolean flags we'll try setting to true to mark completed.
+local COMPLETED_FLAG_CANDIDATES = {{
+    "bIsCompleted",
+    "bIsConstructed",
+    "bConstructionFinished",
+    "bConstructionComplete",
+    "bIsBuilt",
+    "bFinished",
+}}
+
+-- Track which actors we've already completed so we don't redo them.
+local completedActors = {{}}
+
+-- The first method that successfully fires gets cached so we don't
+-- waste pcalls on the others on every subsequent site.
+local cachedMethod = nil
+local cachedFlag = nil
+
+local function GetActorKey(actor)
+    -- Use the full path as a stable identity (FName + memory address
+    -- both vary per session, so we use the full Outer/Name path which
+    -- stays unique within a session).
+    local key = ""
+    pcall(function() key = actor:GetFullName() end)
+    return key
 end
 
--- Track DTs we've already inspected this session so the retry loop
--- doesn't re-log the same "found / no rows matched" pair every 5
--- seconds for a DT we've already determined doesn't have depot
--- rows. Keyed by full DT path.
-local inspectedDTs = {}
-
--- Find every DataTable whose path looks like a candidate Buildings
--- table. Returns a list of {dt, fullname} pairs we haven't already
--- inspected this session.
-local function FindCandidateBuildingsDTs()
-    local results = {}
-    local dts = FindAllOf("DataTable")
-    if not dts then return results end
-    local count = 0
-    pcall(function() count = #dts end)
-    for i = 1, count do
-        local dt = dts[i]
-        local fullname = ""
-        pcall(function() fullname = dt:GetFullName() end)
-        local lower = string.lower(fullname)
-        if string.find(lower, CONFIG.CandidatePathSubstring, 1, true)
-           and not inspectedDTs[fullname] then
-            results[#results + 1] = {dt = dt, fullname = fullname}
-        end
+-- Try every candidate completion method on the actor. Returns the
+-- name of the method that fired, or nil if none worked.
+local function TryComplete(actor)
+    -- Cache hit: try the previously-successful method first
+    if cachedMethod then
+        local ok = pcall(function() actor[cachedMethod](actor) end)
+        if ok then return cachedMethod end
     end
-    return results
-end
-
--- Field-name candidates we'll probe on a depot/garage row to find
--- the construction-requirements list. MT's row layout varies across
--- builds; these are every reasonable name we've seen or expect to
--- see. The first one that returns a non-nil value with a usable
--- iteration count wins.
-local STEPS_FIELD_CANDIDATES = {
-    "Steps",
-    "ConstructionSteps",
-    "BuildingSteps",
-    "BuildSteps",
-    "Stages",
-    "ConstructionStages",
-}
-
--- For each step, the "stuff to deliver" sub-collection. Same idea —
--- TMap (CargoName -> int) on older builds, sometimes a TArray of
--- structs on newer builds.
-local STEP_REQUIREMENTS_FIELD_CANDIDATES = {
-    "Materials",
-    "RequiredMaterials",
-    "RequiredCargos",
-    "Cargos",
-    "Requirements",
-    "Items",
-    "Components",
-}
-
--- And on each requirement struct (when it's an array of structs
--- rather than a TMap), the field that holds the amount we want to
--- zero out. We set every one we can find — fields that don't exist
--- pcall-fail silently.
-local AMOUNT_FIELD_CANDIDATES = {
-    "Amount",
-    "Count",
-    "Quantity",
-    "Required",
-    "RequiredAmount",
-    "Num",
-}
-
--- Zero every value in a TMap (FName -> int). UE4SS exposes TMap with
--- a ForEach iterator; pairs() works on most builds too. Collect keys
--- first then assign 0 so we don't mutate while iterating.
-local function ZeroTMapValues(materials)
-    if not materials then return 0 end
-    local keys = {}
-    pcall(function()
-        materials:ForEach(function(k, _v) keys[#keys + 1] = k end)
-    end)
-    if #keys == 0 then
-        pcall(function()
-            for k, _v in pairs(materials) do keys[#keys + 1] = k end
-        end)
-    end
-    local zeroed = 0
-    for _, k in ipairs(keys) do
-        local ok = pcall(function() materials[k] = 0 end)
-        if ok then zeroed = zeroed + 1 end
-    end
-    return zeroed
-end
-
--- Zero every reasonable "amount" field on each entry in a TArray of
--- requirement structs (the alternative shape some builds use instead
--- of a TMap).
-local function ZeroRequirementArray(reqs)
-    if not reqs then return 0 end
-    local count = 0
-    pcall(function() count = #reqs end)
-    local zeroed = 0
-    for i = 1, count do
-        local entry = reqs[i]
-        if entry then
-            for _, fieldName in ipairs(AMOUNT_FIELD_CANDIDATES) do
-                local ok = pcall(function() entry[fieldName] = 0 end)
-                if ok then zeroed = zeroed + 1 end
+    -- Try each candidate
+    for _, m in ipairs(COMPLETE_METHOD_CANDIDATES) do
+        if m ~= cachedMethod then
+            local ok = pcall(function() actor[m](actor) end)
+            if ok then
+                cachedMethod = m
+                Log("Discovered working completion method: " .. m)
+                return m
             end
         end
     end
-    return zeroed
-end
-
--- Probe a step for its requirements collection, regardless of shape.
--- Returns (zeroedCount, shapeName) where shapeName is the field we
--- found + how we processed it. Logged once per row for debugging.
-local function ZeroStepRequirements(step)
-    for _, fieldName in ipairs(STEP_REQUIREMENTS_FIELD_CANDIDATES) do
-        local reqs = SafeGet(step, fieldName)
-        if reqs then
-            -- Try TMap-shape first.
-            local n = ZeroTMapValues(reqs)
-            if n > 0 then return n, fieldName .. " (tmap)" end
-            -- Fall back to array-of-structs shape.
-            n = ZeroRequirementArray(reqs)
-            if n > 0 then return n, fieldName .. " (array)" end
+    -- Method approach failed — try setting flag fields
+    if cachedFlag then
+        local ok = pcall(function() actor[cachedFlag] = true end)
+        if ok then return "(flag) " .. cachedFlag end
+    end
+    for _, f in ipairs(COMPLETED_FLAG_CANDIDATES) do
+        if f ~= cachedFlag then
+            local ok = pcall(function() actor[f] = true end)
+            if ok then
+                cachedFlag = f
+                Log("Discovered working completion flag: " .. f)
+                return "(flag) " .. f
+            end
         end
     end
-    return 0, nil
+    return nil
 end
 
--- Probe a row for its steps collection. Returns (steps_array, fieldName).
-local function FindStepsArray(row)
-    for _, fieldName in ipairs(STEPS_FIELD_CANDIDATES) do
-        local steps = SafeGet(row, fieldName)
-        if steps then
+local successCount = 0
+local failureLogged = false
+
+local function ScanAndComplete()
+    for _, class_name in ipairs(CLASS_CANDIDATES) do
+        local actors = FindAllOf(class_name)
+        if actors then
             local count = 0
-            pcall(function() count = #steps end)
-            if count > 0 then return steps, fieldName end
-        end
-    end
-    return nil, nil
-end
-
-local applied = false
-local retryAttempts = 0
-
--- Walk every Buildings-ish DataTable, skipping ones we've already
--- inspected. Returns true when we've either applied successfully OR
--- hit the retry cap (so the caller's LoopAsync should stop).
-local function ApplyToBuildingsDT()
-    if applied then return true end
-    retryAttempts = retryAttempts + 1
-
-    local candidates = FindCandidateBuildingsDTs()
-    local sawAnyMatching = false
-
-    for _, entry in ipairs(candidates) do
-        local dt = entry.dt
-        local fullname = entry.fullname
-        local rowNames = nil
-        pcall(function() rowNames = dt:GetRowNames() end)
-        local n = 0
-        if rowNames then pcall(function() n = #rowNames end) end
-        if n == 0 then
-            -- DT exists but rows haven't streamed in yet. Don't mark
-            -- as inspected — try it again on the next retry.
-            goto continue
-        end
-
-        -- Now we have a populated candidate. Mark inspected so we
-        -- don't re-log the same "Found / scanning" pair every 5s
-        -- for a DT that doesn't contain depot rows.
-        inspectedDTs[fullname] = true
-
-        local matchedRows = 0
-        local stepsTouched = 0
-        local materialEntriesZeroed = 0
-        local rowsWithNoStepsField = 0
-        local rowsWithEmptyRequirements = 0
-        local stepsFieldUsed = nil
-        local reqShapeUsed = nil
-        for i = 1, n do
-            local rowName = rowNames[i]
-            local rowNameStr = ""
-            pcall(function() rowNameStr = tostring(rowName) end)
-            if MatchesRow(rowNameStr) then
-                local row = nil
-                pcall(function() row = dt:FindRow(rowName, "FreeDepotConstruction", false) end)
-                if row then
-                    matchedRows = matchedRows + 1
-                    local steps, stepsField = FindStepsArray(row)
-                    if not steps then
-                        rowsWithNoStepsField = rowsWithNoStepsField + 1
-                    else
-                        stepsFieldUsed = stepsField
-                        local stepCount = 0
-                        pcall(function() stepCount = #steps end)
-                        local rowZeroed = 0
-                        for s = 1, stepCount do
-                            local step = steps[s]
-                            if step then
-                                local z, shape = ZeroStepRequirements(step)
-                                if z > 0 then
-                                    stepsTouched = stepsTouched + 1
-                                    materialEntriesZeroed = materialEntriesZeroed + z
-                                    rowZeroed = rowZeroed + z
-                                    reqShapeUsed = shape
-                                end
-                            end
-                        end
-                        if rowZeroed == 0 then
-                            rowsWithEmptyRequirements = rowsWithEmptyRequirements + 1
-                        end
+            pcall(function() count = #actors end)
+            for i = 1, count do
+                local actor = actors[i]
+                local key = GetActorKey(actor)
+                if key ~= "" and not completedActors[key] then
+                    local result = TryComplete(actor)
+                    if result then
+                        completedActors[key] = true
+                        successCount = successCount + 1
+                        Log(string.format(
+                            "Completed construction site %s via %s "
+                            .. "(class %s)",
+                            key, result, class_name))
+                    elseif not failureLogged then
+                        failureLogged = true
+                        Log(string.format(
+                            "Found construction site %s (class %s) but "
+                            .. "no candidate completion method or flag "
+                            .. "worked. Use UE4SS Live View on this "
+                            .. "actor to find the real method/field "
+                            .. "name and report it so the candidate "
+                            .. "list can be extended.",
+                            key, class_name))
                     end
                 end
             end
         end
-
-        if materialEntriesZeroed > 0 then
-            sawAnyMatching = true
-            Log(string.format(
-                "Applied to %s: %d row(s), %d step(s), %d entries = 0. "
-                .. "Layout: row.%s -> step.%s",
-                fullname, matchedRows, stepsTouched, materialEntriesZeroed,
-                stepsFieldUsed or "?", reqShapeUsed or "?"))
-            applied = true
-            return true
-        elseif matchedRows > 0 then
-            -- Found rows but couldn't zero any materials. Surface
-            -- which probe paths failed so we can iterate (and so the
-            -- user has actionable info to report). DON'T mark applied
-            -- — keep retrying in case a later DT in the candidate
-            -- list does have the right layout.
-            inspectedDTs[fullname] = nil  -- allow re-inspection only if rows show up later
-            inspectedDTs[fullname] = true -- but for now skip this DT
-            local diag = string.format(
-                "Found %d depot/garage row(s) in %s but couldn't zero any "
-                .. "materials. ", matchedRows, fullname)
-            if rowsWithNoStepsField == matchedRows then
-                diag = diag .. "No row exposed a recognised steps array "
-                    .. "(tried: Steps, ConstructionSteps, BuildingSteps, "
-                    .. "BuildSteps, Stages, ConstructionStages). "
-            elseif rowsWithEmptyRequirements > 0 then
-                diag = diag .. string.format(
-                    "%d row(s) have a steps array (field: %s) but no "
-                    .. "step exposed a recognised requirements collection "
-                    .. "(tried: Materials, RequiredMaterials, RequiredCargos, "
-                    .. "Cargos, Requirements, Items, Components). ",
-                    rowsWithEmptyRequirements, stepsFieldUsed or "?")
-            end
-            diag = diag .. "Skipping this DT; will keep looking."
-            Log(diag)
-        else
-            -- This DT has rows but none look like depot/garage —
-            -- log once and move on.
-            Log(string.format(
-                "Inspected %s (%d rows) — no depot/garage rows. Skipping this DT.",
-                fullname, n))
-        end
-        ::continue::
     end
-
-    -- Retry budget exhausted? Give up loudly so the user knows
-    -- whether the mod found anything at all.
-    if retryAttempts >= CONFIG.MaxRetries then
-        if sawAnyMatching then
-            applied = true  -- shouldn't reach here, but defensive
-            return true
-        end
-        Log(string.format(
-            "Gave up after %d attempts. No DataTable on this build had "
-            .. "rows whose names contain 'depot' or 'garage'. The mod "
-            .. "is now idle. If your build's construction-cost DT lives "
-            .. "outside /Game/.../Buildings/, report the actual DT path "
-            .. "so we can extend the candidate match.",
-            retryAttempts))
-        applied = true  -- stop the LoopAsync
-        return true
-    end
-
-    return false  -- caller will retry
 end
 
+-- Init
 Log("=== Cryovac Free Depot Construction Loading ===")
 
 ExecuteWithDelay(CONFIG.InitialDelayMs, function()
-    if not ApplyToBuildingsDT() then
-        LoopAsync(CONFIG.RetryIntervalMs, function()
-            return ApplyToBuildingsDT()
-        end)
-    end
+    ScanAndComplete()
+end)
+
+LoopAsync(CONFIG.ScanIntervalMs, function()
+    ScanAndComplete()
+    return false  -- keep looping forever
 end)
 
 Log("=== Cryovac Free Depot Construction Loaded ===")
@@ -403,49 +254,61 @@ Log("=== Cryovac Free Depot Construction Loaded ===")
 
 
 def generate_main_lua(config: Dict[str, Any]) -> str:
-    # No substitutions — the Lua is fully static. config is accepted
-    # for API symmetry with the other deployers but ignored.
     return _MAIN_LUA_TEMPLATE
 
 
 def generate_readme(config: Dict[str, Any]) -> str:
     body = (
-        "Zeroes out the material cost to build depots and garages.\n\n"
-        "After this mod loads (about 8 seconds after world load), the\n"
-        "Buildings DataTable is rewritten so every Depot or Garage row\n"
-        "has 0 required materials in every construction step. Place a\n"
-        "Depot_01 / Depot_02 / LargeGarage_01 construction site and it\n"
-        "completes immediately — no delivery runs needed.\n\n"
+        "Force-completes Depot and Large Garage construction sites at\n"
+        "runtime. Player places a Depot_01 / Depot_02 / LargeGarage_01\n"
+        "construction site, and within ~3 seconds the mod detects it\n"
+        "and forces it to the 'completed' state.\n\n"
         "WHAT THIS MOD DOES\n"
         "------------------\n"
-        "1. Locates the /Game/DataAsset/Buildings/Buildings DataTable.\n"
-        "2. For each row whose name contains 'Depot' or 'Garage'\n"
-        "   (case-insensitive), walks the row's Steps[] array.\n"
-        "3. For each step, sets every value in Steps[i].Materials\n"
-        "   (a TMap of FName -> int32) to 0.\n"
-        "4. Stops polling once it succeeds.\n\n"
-        "If the DataTable hasn't streamed in yet, the mod retries\n"
-        "every 5 seconds. UE4SS log line\n"
-        "'Cryovac Free Depot Construction Loaded' confirms the mod\n"
-        "ran; 'Done: N depot/garage rows zeroed' confirms it found\n"
-        "and processed the rows.\n\n"
-        "AFFECTED ROWS\n"
-        "-------------\n"
-        "Vanilla rows that match: Depot_01, Depot_02, LargeGarage_01.\n"
-        "If a future MT update adds new depot/garage variants whose\n"
-        "row names contain 'Depot' or 'Garage', they're picked up\n"
-        "automatically. Houses, Furnitures, and other building types\n"
-        "are not affected.\n\n"
+        "1. Every 3 seconds, scans for construction-site actors via\n"
+        "   FindAllOf using a list of likely class names\n"
+        "   (Depot_01_Construction_C, Garage_01_Construction_C,\n"
+        "   MTBuildingConstruction, etc.).\n"
+        "2. For each newly-found site, tries a list of likely\n"
+        "   completion methods (CompleteConstruction,\n"
+        "   ServerCompleteConstruction, OnAllMaterialsDelivered, ...).\n"
+        "3. The first method that fires without error gets cached;\n"
+        "   subsequent sites use it directly with no further probing.\n"
+        "4. If no method works, falls back to setting boolean flags\n"
+        "   (bIsCompleted, bIsConstructed, ...).\n"
+        "5. Each completed site is tracked so the mod doesn't redo it.\n\n"
+        "DIAGNOSING ISSUES\n"
+        "-----------------\n"
+        "Check UE4SS.log for these lines from this mod:\n"
+        "  '=== Cryovac Free Depot Construction Loaded ==='\n"
+        "    -> mod loaded successfully.\n"
+        "  'Discovered working completion method: <name>'\n"
+        "    -> the mod found a working completion method on this build.\n"
+        "  'Completed construction site <path> via <name> (class <C>)'\n"
+        "    -> a site was just force-completed.\n"
+        "  'Found construction site ... but no candidate ... worked'\n"
+        "    -> none of the candidate methods fired. Use UE4SS Live View\n"
+        "       to inspect the construction-site actor and report the\n"
+        "       actual method/field name on this build.\n\n"
+        "WHY THIS REPLACES THE v7.2.x APPROACH\n"
+        "-------------------------------------\n"
+        "v7.2.0 - v7.2.3 tried to modify Buildings_Houses.uexp to\n"
+        "zero or reduce construction costs. That had two failure modes:\n"
+        "  (a) all-zero requirements never trigger the vanilla\n"
+        "      completion event (no delivery -> no event -> stuck);\n"
+        "  (b) leaving 1 unit per cargo still requires the player to\n"
+        "      produce multi-step cargoes (Plastic Pipes, H-Beam),\n"
+        "      defeating the 'free construction' goal.\n"
+        "Force-completing the actor at runtime sidesteps both.\n\n"
         "NO SETTINGS\n"
         "-----------\n"
-        "This mod is a binary toggle — deploy to enable, remove the\n"
-        "folder or set the line in mods.txt to '0' to disable. There\n"
-        "are no per-cost knobs to tune.\n\n"
+        "Binary toggle. Deploy to enable; remove the folder or set\n"
+        "the line in mods.txt to '0' to disable.\n\n"
         "MULTIPLAYER\n"
         "-----------\n"
-        "Server-side mod. The host runs it; clients see the zeroed\n"
-        "costs because the DataTable is the authoritative source for\n"
-        "construction requirements.\n"
+        "Server-side mod. Install on the host / dedicated server only.\n"
+        "Clients see the completed building because the construction\n"
+        "state replicates from the server.\n"
     )
     return render_install_readme(MOD_NAME, body)
 
@@ -457,7 +320,7 @@ def deploy(config: Dict[str, Any], output_dir: str = None) -> Dict[str, Any]:
         output_dir=out_dir,
         main_lua=generate_main_lua(config),
         readme=generate_readme(config),
-        mod_info={'binary_toggle': True},
+        mod_info={'binary_toggle': True, 'strategy': 'runtime_force_complete'},
     )
 
 
