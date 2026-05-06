@@ -115,22 +115,59 @@ def find_cargo_arrays(uexp_bytes: bytes) -> List[CargoArray]:
     return found
 
 
-def zero_all_quantities(uexp_bytes: bytes) -> Tuple[bytes, List[CargoArray]]:
-    """Return a copy of *uexp_bytes* with every cargo-array quantity
-    set to 0, plus the list of arrays the modifier touched.
+_SAND_ENTRY_INDEX = 1  # See module docstring + verified against in-game UI
 
-    The .uasset doesn't need to be modified — the name table, import
-    table, export table, and offsets all stay identical. Only the
-    .uexp values change, and the .uexp's serial size in the .uasset
-    export entry stays the same.
+
+def zero_all_quantities(uexp_bytes: bytes,
+                        sand_token_qty: int = 1) -> Tuple[bytes, List[CargoArray]]:
+    """Return a copy of *uexp_bytes* with construction costs reduced to
+    "1 unit of Sand only", plus the list of arrays touched.
+
+    Why not just set every quantity to 0:
+      Motor Town's construction state machine advances on delivery
+      events — when a player delivers cargo to a construction site,
+      the state machine fires "step delivered" and progresses toward
+      "construction finished". With every requirement set to 0 the
+      construction site can never receive a delivery (the slot is
+      already full at 0/0), so the state machine never fires the
+      completion event, and the building stays stuck in 'in progress'
+      forever.
+
+      Verified empirically by the user in v7.x testing.
+
+    The fix:
+      In each detected cargo array, force the entry at the canonical
+      Sand position (index 1 — confirmed against the in-game
+      Construction UI which lists materials in order
+      Concrete, Sand, WoodPlank, HBeam, PlasticPipes) to a token
+      quantity of 1 unit, and zero out every other entry. The player
+      then needs to deliver exactly 1 Sand to complete a depot or
+      garage. Sand is one of the cheapest cargoes in MT and any
+      industrial pickup carries plenty, so this is effectively free
+      construction without breaking the vanilla state machine.
+
+    Args:
+      uexp_bytes:     the original .uexp content
+      sand_token_qty: the token quantity left on the Sand entry.
+                      Default 1 ("near-free"). Pass 0 to truly zero
+                      everything (gives stuck construction sites —
+                      only useful if paired with a runtime Lua mod
+                      that force-completes them).
+
+    The .uasset doesn't need updating — only int32 values inside the
+    .uexp change, all sizes and offsets stay identical.
     """
     arrays = find_cargo_arrays(uexp_bytes)
     if not arrays:
         return uexp_bytes, []
     buf = bytearray(uexp_bytes)
     for arr in arrays:
-        for off in arr.entry_offsets:
-            struct.pack_into('<i', buf, off, 0)
+        for i, off in enumerate(arr.entry_offsets):
+            if i == _SAND_ENTRY_INDEX:
+                new_qty = sand_token_qty
+            else:
+                new_qty = 0
+            struct.pack_into('<i', buf, off, new_qty)
     return bytes(buf), arrays
 
 

@@ -285,18 +285,27 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         bl.addWidget(_label(_t("BUILDING CONSTRUCTION"), "eyebrow"))
         bl.addWidget(_label(_t("Free Depot / Garage / House Construction"), "section"))
         bl.addWidget(_label(_t(
-            "Patches the Buildings DataTable so every construction-step "
-            "cargo requirement drops to 0. Place a Depot / Large Garage "
-            "construction site and it completes immediately — no "
-            "deliveries needed. Houses with construction costs are also "
-            "freed (most houses are already free in vanilla). The "
-            "patched .uasset/.uexp files are written into the mod tree "
-            "and packed automatically when you click Pack Mod.\n\n"
-            "This feature ships with bundled vanilla data — no unpacked "
-            "Motor Town folder is required."
+            "Patches the Buildings DataTable so depot / garage "
+            "construction costs drop to <b>1 Sand</b>. Place a "
+            "construction site, deliver one Sand, and the building "
+            "completes — no other materials needed.\n\n"
+            "Why 1 Sand instead of zero: Motor Town's construction "
+            "state machine advances on delivery events. If every "
+            "requirement is set to 0, no delivery can fire (the slot "
+            "is already full at 0/0), so the state machine never "
+            "triggers the completion event and the construction site "
+            "stays stuck in 'in progress' forever. Leaving a "
+            "single 1-Sand requirement preserves the vanilla "
+            "completion flow while making construction effectively "
+            "free — Sand is one of the cheapest cargoes in the game "
+            "and any industrial pickup carries plenty.\n\n"
+            "The patched .uasset/.uexp files are written into the mod "
+            "tree and packed automatically when you click Pack Mod. "
+            "This feature ships with bundled vanilla data — no "
+            "unpacked Motor Town folder is required."
         ), "muted"))
         self.free_buildings_cb = QtWidgets.QCheckBox(
-            _t("Enable free construction (Depots, Garages, all buildings)")
+            _t("Enable near-free construction (Depots, Garages — costs 1 Sand each)")
         )
         self.free_buildings_cb.setStyleSheet(f"""
             QCheckBox {{
