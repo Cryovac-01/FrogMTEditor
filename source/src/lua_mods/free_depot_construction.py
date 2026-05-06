@@ -179,6 +179,30 @@ local TIMER_FIELD_CANDIDATES = {{
     "ConstructionTimeRemaining", "TimeToComplete",
 }}
 
+-- "Delivered amount" array/map field candidates. We try to populate
+-- these to high values so any "delivered >= required" check trips.
+-- Strategy: set the whole field to a TArray of high integers, OR
+-- iterate and set each element. UE4SS exposes both array and map
+-- operations but the API surface varies.
+local DELIVERED_FIELD_CANDIDATES = {{
+    "DeliveredAmount", "DeliveredAmounts",
+    "DeliveredMaterials", "DeliveredCargos",
+    "DeliveredItems", "CurrentDeliveries",
+    "Deliveries", "DeliveryCounts",
+    "MaterialsDelivered", "CargosDelivered",
+    "MaterialProgress", "DeliveryProgress",
+}}
+
+-- Total / required side, in case the construction logic compares
+-- delivered >= required and we need to lower required to 0 instead
+-- (or read it to know what to stuff into delivered).
+local REQUIRED_FIELD_CANDIDATES = {{
+    "RequiredAmount", "RequiredAmounts",
+    "RequiredMaterials", "RequiredCargos",
+    "RequiredItems", "MaterialsRequired",
+    "TotalRequired", "RequiredDeliveries",
+}}
+
 -- Track which actors we've already completed so we don't redo them.
 local completedActors = {{}}
 
@@ -193,6 +217,75 @@ local function GetActorKey(actor)
     return key
 end
 
+-- Try to populate a "delivered amounts" array on the actor with high
+-- values, so any "delivered >= required" check trips. Returns the
+-- field name we wrote to, or nil if no candidate matched.
+local function StuffDeliveredArray(actor)
+    for _, fname in ipairs(DELIVERED_FIELD_CANDIDATES) do
+        local field = SafeGet(actor, fname)
+        if field then
+            -- Try as array: set each element to 9999
+            local count = 0
+            pcall(function() count = #field end)
+            if count > 0 then
+                local touched = 0
+                for i = 1, count do
+                    local ok = pcall(function() field[i] = 9999 end)
+                    if ok then touched = touched + 1 end
+                end
+                if touched > 0 then
+                    return fname .. "[" .. touched .. "]"
+                end
+            end
+            -- Try as TMap: ForEach + write each value
+            local touched_map = 0
+            pcall(function()
+                field:ForEach(function(k, _v)
+                    local ok = pcall(function() field[k] = 9999 end)
+                    if ok then touched_map = touched_map + 1 end
+                end)
+            end)
+            if touched_map > 0 then
+                return fname .. "(map=" .. touched_map .. ")"
+            end
+        end
+    end
+    return nil
+end
+
+-- Lower required-amount arrays to 0 (alternate angle: instead of
+-- topping up delivered, drop required to nothing).
+local function ZeroRequiredArray(actor)
+    for _, fname in ipairs(REQUIRED_FIELD_CANDIDATES) do
+        local field = SafeGet(actor, fname)
+        if field then
+            local count = 0
+            pcall(function() count = #field end)
+            if count > 0 then
+                local touched = 0
+                for i = 1, count do
+                    local ok = pcall(function() field[i] = 0 end)
+                    if ok then touched = touched + 1 end
+                end
+                if touched > 0 then
+                    return fname .. "[" .. touched .. "]=0"
+                end
+            end
+            local touched_map = 0
+            pcall(function()
+                field:ForEach(function(k, _v)
+                    local ok = pcall(function() field[k] = 0 end)
+                    if ok then touched_map = touched_map + 1 end
+                end)
+            end)
+            if touched_map > 0 then
+                return fname .. "(map=" .. touched_map .. ")=0"
+            end
+        end
+    end
+    return nil
+end
+
 -- Aggressive multi-strategy completion attempt. Tries everything in
 -- sequence; returns the list of strategies that ran without error.
 -- We don't stop at the first success because the construction actor
@@ -201,26 +294,35 @@ end
 local function TryComplete(actor)
     local applied = {{}}
 
-    -- 1. Set every plausible "completed" boolean flag
+    -- 1. Stuff the delivered-amounts array first so any subsequent
+    --    method call observes "all materials delivered".
+    local stuffed = StuffDeliveredArray(actor)
+    if stuffed then applied[#applied + 1] = "delivered:" .. stuffed end
+
+    -- 2. Lower required-amounts to 0 from the other side.
+    local zeroed = ZeroRequiredArray(actor)
+    if zeroed then applied[#applied + 1] = "required:" .. zeroed end
+
+    -- 3. Set every plausible "completed" boolean flag
     for _, f in ipairs(COMPLETED_FLAG_CANDIDATES) do
         local ok = pcall(function() actor[f] = true end)
         if ok then applied[#applied + 1] = "flag:" .. f end
     end
 
-    -- 2. Push every step counter to 9999 so step-comparison logic
+    -- 4. Push every step counter to 9999 so step-comparison logic
     --    (current >= total) trivially passes
     for _, f in ipairs(STEP_FIELD_CANDIDATES) do
         local ok = pcall(function() actor[f] = 9999 end)
         if ok then applied[#applied + 1] = "step:" .. f end
     end
 
-    -- 3. Zero every plausible timer field
+    -- 5. Zero every plausible timer field
     for _, f in ipairs(TIMER_FIELD_CANDIDATES) do
         local ok = pcall(function() actor[f] = 0 end)
         if ok then applied[#applied + 1] = "timer:" .. f end
     end
 
-    -- 4. Try every candidate completion method/RPC. The order
+    -- 6. Try every candidate completion method/RPC. The order
     --    matters somewhat — flag-set above lets OnRep_ callbacks
     --    see the flipped value when fired here.
     if cachedMethod then
