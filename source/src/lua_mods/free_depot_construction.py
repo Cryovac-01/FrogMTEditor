@@ -135,33 +135,117 @@ local function FindCandidateBuildingsDTs()
     return results
 end
 
--- Zero every value in a Step.Materials TMap. UE4SS exposes TMap with
--- a ForEach iterator; if that's unavailable, fall back to pairs().
--- Either way, collect keys first then assign 0 to each so we don't
--- mutate while iterating.
-local function ZeroMaterialsMap(materials)
+-- Field-name candidates we'll probe on a depot/garage row to find
+-- the construction-requirements list. MT's row layout varies across
+-- builds; these are every reasonable name we've seen or expect to
+-- see. The first one that returns a non-nil value with a usable
+-- iteration count wins.
+local STEPS_FIELD_CANDIDATES = {
+    "Steps",
+    "ConstructionSteps",
+    "BuildingSteps",
+    "BuildSteps",
+    "Stages",
+    "ConstructionStages",
+}
+
+-- For each step, the "stuff to deliver" sub-collection. Same idea —
+-- TMap (CargoName -> int) on older builds, sometimes a TArray of
+-- structs on newer builds.
+local STEP_REQUIREMENTS_FIELD_CANDIDATES = {
+    "Materials",
+    "RequiredMaterials",
+    "RequiredCargos",
+    "Cargos",
+    "Requirements",
+    "Items",
+    "Components",
+}
+
+-- And on each requirement struct (when it's an array of structs
+-- rather than a TMap), the field that holds the amount we want to
+-- zero out. We set every one we can find — fields that don't exist
+-- pcall-fail silently.
+local AMOUNT_FIELD_CANDIDATES = {
+    "Amount",
+    "Count",
+    "Quantity",
+    "Required",
+    "RequiredAmount",
+    "Num",
+}
+
+-- Zero every value in a TMap (FName -> int). UE4SS exposes TMap with
+-- a ForEach iterator; pairs() works on most builds too. Collect keys
+-- first then assign 0 so we don't mutate while iterating.
+local function ZeroTMapValues(materials)
     if not materials then return 0 end
     local keys = {}
-    -- Try ForEach
-    local triedForEach, ok = pcall(function()
-        materials:ForEach(function(k, _v)
-            keys[#keys + 1] = k
-        end)
+    pcall(function()
+        materials:ForEach(function(k, _v) keys[#keys + 1] = k end)
     end)
-    -- Fall back to pairs() if ForEach didn't yield anything.
     if #keys == 0 then
         pcall(function()
-            for k, _v in pairs(materials) do
-                keys[#keys + 1] = k
-            end
+            for k, _v in pairs(materials) do keys[#keys + 1] = k end
         end)
     end
     local zeroed = 0
     for _, k in ipairs(keys) do
-        local ok2 = pcall(function() materials[k] = 0 end)
-        if ok2 then zeroed = zeroed + 1 end
+        local ok = pcall(function() materials[k] = 0 end)
+        if ok then zeroed = zeroed + 1 end
     end
     return zeroed
+end
+
+-- Zero every reasonable "amount" field on each entry in a TArray of
+-- requirement structs (the alternative shape some builds use instead
+-- of a TMap).
+local function ZeroRequirementArray(reqs)
+    if not reqs then return 0 end
+    local count = 0
+    pcall(function() count = #reqs end)
+    local zeroed = 0
+    for i = 1, count do
+        local entry = reqs[i]
+        if entry then
+            for _, fieldName in ipairs(AMOUNT_FIELD_CANDIDATES) do
+                local ok = pcall(function() entry[fieldName] = 0 end)
+                if ok then zeroed = zeroed + 1 end
+            end
+        end
+    end
+    return zeroed
+end
+
+-- Probe a step for its requirements collection, regardless of shape.
+-- Returns (zeroedCount, shapeName) where shapeName is the field we
+-- found + how we processed it. Logged once per row for debugging.
+local function ZeroStepRequirements(step)
+    for _, fieldName in ipairs(STEP_REQUIREMENTS_FIELD_CANDIDATES) do
+        local reqs = SafeGet(step, fieldName)
+        if reqs then
+            -- Try TMap-shape first.
+            local n = ZeroTMapValues(reqs)
+            if n > 0 then return n, fieldName .. " (tmap)" end
+            -- Fall back to array-of-structs shape.
+            n = ZeroRequirementArray(reqs)
+            if n > 0 then return n, fieldName .. " (array)" end
+        end
+    end
+    return 0, nil
+end
+
+-- Probe a row for its steps collection. Returns (steps_array, fieldName).
+local function FindStepsArray(row)
+    for _, fieldName in ipairs(STEPS_FIELD_CANDIDATES) do
+        local steps = SafeGet(row, fieldName)
+        if steps then
+            local count = 0
+            pcall(function() count = #steps end)
+            if count > 0 then return steps, fieldName end
+        end
+    end
+    return nil, nil
 end
 
 local applied = false
@@ -198,6 +282,10 @@ local function ApplyToBuildingsDT()
         local matchedRows = 0
         local stepsTouched = 0
         local materialEntriesZeroed = 0
+        local rowsWithNoStepsField = 0
+        local rowsWithEmptyRequirements = 0
+        local stepsFieldUsed = nil
+        local reqShapeUsed = nil
         for i = 1, n do
             local rowName = rowNames[i]
             local rowNameStr = ""
@@ -207,33 +295,68 @@ local function ApplyToBuildingsDT()
                 pcall(function() row = dt:FindRow(rowName, "FreeDepotConstruction", false) end)
                 if row then
                     matchedRows = matchedRows + 1
-                    local steps = SafeGet(row, "Steps")
-                    if steps then
+                    local steps, stepsField = FindStepsArray(row)
+                    if not steps then
+                        rowsWithNoStepsField = rowsWithNoStepsField + 1
+                    else
+                        stepsFieldUsed = stepsField
                         local stepCount = 0
                         pcall(function() stepCount = #steps end)
+                        local rowZeroed = 0
                         for s = 1, stepCount do
                             local step = steps[s]
                             if step then
-                                local mats = SafeGet(step, "Materials")
-                                local z = ZeroMaterialsMap(mats)
+                                local z, shape = ZeroStepRequirements(step)
                                 if z > 0 then
                                     stepsTouched = stepsTouched + 1
                                     materialEntriesZeroed = materialEntriesZeroed + z
+                                    rowZeroed = rowZeroed + z
+                                    reqShapeUsed = shape
                                 end
                             end
+                        end
+                        if rowZeroed == 0 then
+                            rowsWithEmptyRequirements = rowsWithEmptyRequirements + 1
                         end
                     end
                 end
             end
         end
 
-        if matchedRows > 0 then
+        if materialEntriesZeroed > 0 then
             sawAnyMatching = true
             Log(string.format(
-                "Applied to %s: %d depot/garage rows zeroed across %d steps (%d material entries = 0).",
-                fullname, matchedRows, stepsTouched, materialEntriesZeroed))
+                "Applied to %s: %d row(s), %d step(s), %d entries = 0. "
+                .. "Layout: row.%s -> step.%s",
+                fullname, matchedRows, stepsTouched, materialEntriesZeroed,
+                stepsFieldUsed or "?", reqShapeUsed or "?"))
             applied = true
             return true
+        elseif matchedRows > 0 then
+            -- Found rows but couldn't zero any materials. Surface
+            -- which probe paths failed so we can iterate (and so the
+            -- user has actionable info to report). DON'T mark applied
+            -- — keep retrying in case a later DT in the candidate
+            -- list does have the right layout.
+            inspectedDTs[fullname] = nil  -- allow re-inspection only if rows show up later
+            inspectedDTs[fullname] = true -- but for now skip this DT
+            local diag = string.format(
+                "Found %d depot/garage row(s) in %s but couldn't zero any "
+                .. "materials. ", matchedRows, fullname)
+            if rowsWithNoStepsField == matchedRows then
+                diag = diag .. "No row exposed a recognised steps array "
+                    .. "(tried: Steps, ConstructionSteps, BuildingSteps, "
+                    .. "BuildSteps, Stages, ConstructionStages). "
+            elseif rowsWithEmptyRequirements > 0 then
+                diag = diag .. string.format(
+                    "%d row(s) have a steps array (field: %s) but no "
+                    .. "step exposed a recognised requirements collection "
+                    .. "(tried: Materials, RequiredMaterials, RequiredCargos, "
+                    .. "Cargos, Requirements, Items, Components). ",
+                    rowsWithEmptyRequirements, stepsFieldUsed or "?")
+            end
+            diag = diag .. "Skipping this DT; will keep looking."
+            Log(diag)
         else
             -- This DT has rows but none look like depot/garage —
             -- log once and move on.
