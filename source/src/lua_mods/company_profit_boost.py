@@ -302,7 +302,7 @@ end
 -- if a target doesn't exist, so the wrong ones drop out and the
 -- right ones (if any) start firing. Add more here as we learn
 -- the actual function names per MT build.
-local HOOK_TARGETS = {
+local HOOK_TARGETS = {{
     -- Player-controlled deliveries (confirmed working).
     "/Script/MotorTown.MotorTownPlayerController:ServerGiveOwnerProfitShare",
     -- AI driver candidates — these RPCs may not all exist on every
@@ -314,7 +314,7 @@ local HOOK_TARGETS = {
     "/Script/MotorTown.MTCompanySystem:GiveOwnerProfitShare",
     "/Script/MotorTown.MTCompanySystem:Server_GiveOwnerProfitShare",
     "/Script/MotorTown.MotorTownGameMode:GiveOwnerProfitShare",
-}
+}}
 
 -- Single shared boost handler used by every successfully-registered
 -- hook. self may be a PlayerController, AIController, or CompanySystem
@@ -379,7 +379,7 @@ local function SetupHook()
         return
     end
     local registered = 0
-    local registeredNames = {}
+    local registeredNames = {{}}
     for _, target in ipairs(HOOK_TARGETS) do
         -- Short label for the log line: just the trailing
         -- ClassName:FunctionName, drop the /Script/Module. prefix.
