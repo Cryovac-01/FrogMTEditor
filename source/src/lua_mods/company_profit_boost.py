@@ -39,7 +39,14 @@ UI_DESCRIPTION = (
     "Vanilla then pays out the boosted amount as a single transaction "
     "\u2014 the on-screen popup and the company ledger both show the "
     "full boosted number.\n\n"
-    "<b>1.0\u00d7</b> \u2014 no change. Mod is a no-op (hook not installed).<br>"
+    "<b>Player deliveries</b> are always covered. "
+    "<b>AI driver deliveries</b> are covered when their server-side "
+    "profit-share RPC matches one of the candidate targets in the "
+    "mod\u2019s HOOK_TARGETS list. If your AI drivers aren\u2019t "
+    "getting boosted, check the UE4SS log: every successfully-"
+    "registered hook is listed at startup as "
+    "\u201cHooks registered (N): A, B, C\u201d.\n\n"
+    "<b>1.0\u00d7</b> \u2014 no change. Mod is a no-op (hooks not installed).<br>"
     "<b>2.0\u00d7</b> \u2014 deliveries in your own vehicles pay double.<br>"
     "<b>5.0\u00d7</b> \u2014 deliveries in your own vehicles pay 5\u00d7 vanilla.\n\n"
     "Runs on the SERVER (host / dedicated)."
@@ -290,70 +297,117 @@ local function IsHookCallerLocalPlayer(hookSelf)
 end
 
 -- ============================================================
--- Hook: ServerGiveOwnerProfitShare(Vehicle, Money, TxType)
--- Pre-hook that rewrites Money BEFORE vanilla runs, so the boosted
--- amount is what gets paid out (and what the in-game popup / ledger
--- display). Untouched for vehicles not owned by the local player.
--- ============================================================
+-- Hook targets to try. Player path is confirmed; the AI-driver
+-- paths are best-guess names — UE4SS RegisterHook fails silently
+-- if a target doesn't exist, so the wrong ones drop out and the
+-- right ones (if any) start firing. Add more here as we learn
+-- the actual function names per MT build.
+local HOOK_TARGETS = {
+    -- Player-controlled deliveries (confirmed working).
+    "/Script/MotorTown.MotorTownPlayerController:ServerGiveOwnerProfitShare",
+    -- AI driver candidates — these RPCs may not all exist on every
+    -- build. The unsuccessful ones just don't register; pcall keeps
+    -- the others alive.
+    "/Script/MotorTown.MotorTownAIController:ServerGiveOwnerProfitShare",
+    "/Script/MotorTown.MTAIController:ServerGiveOwnerProfitShare",
+    "/Script/MotorTown.MTAICharacter:ServerGiveOwnerProfitShare",
+    "/Script/MotorTown.MTCompanySystem:GiveOwnerProfitShare",
+    "/Script/MotorTown.MTCompanySystem:Server_GiveOwnerProfitShare",
+    "/Script/MotorTown.MotorTownGameMode:GiveOwnerProfitShare",
+}
+
+-- Single shared boost handler used by every successfully-registered
+-- hook. self may be a PlayerController, AIController, or CompanySystem
+-- depending on which RPC fired — the logic doesn't care, it only
+-- reads the vehicle parameter.
+local function BoostHandler(hookName)
+    return function(self, vehicleWrap, moneyWrap, txTypeWrap)
+        local vehicle = Unwrap(vehicleWrap)
+        if not vehicle then return end
+
+        -- Primary path: company-membership check. Works when
+        -- MTCompany's owner-GUID field is reflectable. AI driver
+        -- vehicles are owned by a company, so this catches them too
+        -- as long as discovery succeeded.
+        local matched, company = IsOwnedByMyCompany(vehicle)
+        local matchKind = "company"
+        local matchLabel = nil
+
+        -- Fallback path: when ownedCompanies is empty (MTCompany
+        -- field not reflectable on this build), check whether the
+        -- hook's `self` is the local player's controller. AI driver
+        -- hooks won't pass this check — `self` would be the AI
+        -- controller, not the local player — so AI deliveries only
+        -- get boosted via the company-membership path. The fallback
+        -- exclusively serves human-driver single-player + self-host.
+        if not matched and #ownedCompanies == 0 and IsHookCallerLocalPlayer(self) then
+            matched = true
+            matchKind = "local-controller"
+            company = nil
+        end
+
+        if not matched then return end
+        matchLabel = company and tostring(company.name) or "(local player)"
+
+        local money = Unwrap(moneyWrap) or 0
+        if type(money) ~= "number" or money <= 0 then return end
+
+        local boosted = math.floor(money * CONFIG.Multiplier)
+        if boosted <= money then return end  -- no-op guard
+
+        local setOk, setErr = pcall(function()
+            moneyWrap:set(boosted)
+        end)
+        if setOk then
+            Log(string.format(
+                "boost applied: %d -> %d (x%.2f) via=%s match=%s/%s",
+                money, boosted, CONFIG.Multiplier, hookName, matchKind, matchLabel))
+        else
+            Log("param :set() failed on " .. hookName .. ": " .. tostring(setErr)
+                .. " (vanilla payout unchanged)")
+        end
+    end
+end
+
+-- Hook: try every candidate target. Each pcall'd registration that
+-- succeeds adds another firing site for the boost. AI driver coverage
+-- depends on whether MT exposes one of the candidate AI paths on the
+-- user's build.
 local function SetupHook()
     if math.abs(CONFIG.Multiplier - 1.0) < 1e-6 then
-        Log("Multiplier = 1.0 -- no hook installed (mod is a no-op).")
+        Log("Multiplier = 1.0 -- no hooks installed (mod is a no-op).")
         return
     end
-    local ok, err = pcall(function()
-        RegisterHook(
-            "/Script/MotorTown.MotorTownPlayerController:ServerGiveOwnerProfitShare",
-            function(self, vehicleWrap, moneyWrap, txTypeWrap)
-                local vehicle = Unwrap(vehicleWrap)
-                if not vehicle then return end
-
-                -- Primary path: company-membership check. Works when
-                -- MTCompany's owner-GUID field is reflectable.
-                local matched, company = IsOwnedByMyCompany(vehicle)
-                local matchKind = "company"
-                local matchLabel = nil
-
-                -- Fallback path: if we have NO owned-company list (either
-                -- the discovery failed entirely, or the player hasn't
-                -- founded a company yet), fall back to "the hook's self
-                -- is the local player's controller". This is correct
-                -- for single-player + self-host scenarios.
-                if not matched and #ownedCompanies == 0 and IsHookCallerLocalPlayer(self) then
-                    matched = true
-                    matchKind = "local-controller"
-                    company = nil
-                end
-
-                if not matched then return end
-                matchLabel = company and tostring(company.name) or "(local player)"
-
-                local money = Unwrap(moneyWrap) or 0
-                if type(money) ~= "number" or money <= 0 then return end
-
-                local boosted = math.floor(money * CONFIG.Multiplier)
-                if boosted <= money then return end  -- no-op guard
-
-                -- Rewrite the parameter wrapper. UE4SS exposes :set()
-                -- on param accessors; when vanilla executes, it sees
-                -- the new value and pays out the boosted amount as a
-                -- single transaction.
-                local setOk, setErr = pcall(function()
-                    moneyWrap:set(boosted)
-                end)
-                if setOk then
-                    Log(string.format(
-                        "boost applied: %d -> %d (x%.2f) match=%s/%s",
-                        money, boosted, CONFIG.Multiplier, matchKind, matchLabel))
-                else
-                    Log("param :set() failed: " .. tostring(setErr)
-                        .. " (vanilla payout unchanged)")
-                end
-            end)
-    end)
-    if ok then
-        Log("Hook registered: MotorTownPlayerController:ServerGiveOwnerProfitShare")
+    local registered = 0
+    local registeredNames = {}
+    for _, target in ipairs(HOOK_TARGETS) do
+        -- Short label for the log line: just the trailing
+        -- ClassName:FunctionName, drop the /Script/Module. prefix.
+        local label = target
+        local lastSlash = string.find(string.reverse(target), "/", 1, true)
+        if lastSlash then
+            label = string.sub(target, #target - lastSlash + 2)
+        end
+        local ok, err = pcall(function()
+            RegisterHook(target, BoostHandler(label))
+        end)
+        if ok then
+            registered = registered + 1
+            registeredNames[#registeredNames + 1] = label
+        end
+    end
+    if registered == 0 then
+        Log("WARNING: no hook targets registered. Boost will not fire.")
     else
-        Log("Hook failed: " .. tostring(err))
+        Log(string.format("Hooks registered (%d): %s",
+            registered, table.concat(registeredNames, ", ")))
+        Log("AI driver coverage: depends on which target fires for AI "
+            .. "deliveries on this MT build. If your AI drivers' deliveries "
+            .. "still aren't boosted, run UE4SS Live View, find the "
+            .. "function that handles AI delivery rewards (look for "
+            .. "'Profit', 'Reward', or 'Delivery' in MTAIController / "
+            .. "MTCompanySystem / MotorTownGameMode), and report the "
+            .. "exact name so we can add it to HOOK_TARGETS.")
     end
 end
 
