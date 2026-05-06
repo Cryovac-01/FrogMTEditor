@@ -74,12 +74,21 @@ _MAIN_LUA_TEMPLATE = '''--[[
 local CONFIG = {
     InitialDelayMs = 8000,
     RetryIntervalMs = 5000,
-    TargetDTSubstring = "/DataAsset/Buildings/Buildings",
+    -- Cap retries so we don't spam the log forever on builds where
+    -- the table has been renamed or removed entirely. ~1 minute of
+    -- polling is plenty — the table normally streams in within
+    -- 10–20 seconds of world load.
+    MaxRetries = 12,
     -- Match these substrings against row names (case-insensitive).
     -- Adding "LargeGarage" explicitly because it's the actual row
     -- name, but the lowercase "garage" check below catches it
     -- regardless.
     RowNameSubstrings = { "depot", "garage" },
+    -- Substring that the DataTable's path must contain to be even
+    -- considered a candidate. Loose enough to catch renamed variants
+    -- ("Buildings", "BuildingTypes", "Building_Construction", etc.),
+    -- but specific enough to skip unrelated DTs.
+    CandidatePathSubstring = "/buildings",
 }
 
 local function Log(msg) print("[CryovacFreeDepotConstruction] " .. msg) end
@@ -98,22 +107,32 @@ local function MatchesRow(rowNameStr)
     return false
 end
 
--- Scan FindAllOf("DataTable") for the Buildings table. Returns the
--- DT object or nil.
-local function FindBuildingsDT()
+-- Track DTs we've already inspected this session so the retry loop
+-- doesn't re-log the same "found / no rows matched" pair every 5
+-- seconds for a DT we've already determined doesn't have depot
+-- rows. Keyed by full DT path.
+local inspectedDTs = {}
+
+-- Find every DataTable whose path looks like a candidate Buildings
+-- table. Returns a list of {dt, fullname} pairs we haven't already
+-- inspected this session.
+local function FindCandidateBuildingsDTs()
+    local results = {}
     local dts = FindAllOf("DataTable")
-    if not dts then return nil end
+    if not dts then return results end
     local count = 0
     pcall(function() count = #dts end)
     for i = 1, count do
         local dt = dts[i]
         local fullname = ""
         pcall(function() fullname = dt:GetFullName() end)
-        if string.find(fullname, CONFIG.TargetDTSubstring, 1, true) then
-            return dt, fullname
+        local lower = string.lower(fullname)
+        if string.find(lower, CONFIG.CandidatePathSubstring, 1, true)
+           and not inspectedDTs[fullname] then
+            results[#results + 1] = {dt = dt, fullname = fullname}
         end
     end
-    return nil
+    return results
 end
 
 -- Zero every value in a Step.Materials TMap. UE4SS exposes TMap with
@@ -146,67 +165,104 @@ local function ZeroMaterialsMap(materials)
 end
 
 local applied = false
+local retryAttempts = 0
 
+-- Walk every Buildings-ish DataTable, skipping ones we've already
+-- inspected. Returns true when we've either applied successfully OR
+-- hit the retry cap (so the caller's LoopAsync should stop).
 local function ApplyToBuildingsDT()
     if applied then return true end
-    local dt, fullname = FindBuildingsDT()
-    if not dt then
-        return false  -- DT not loaded yet; caller will retry
-    end
-    local rowNames = nil
-    pcall(function() rowNames = dt:GetRowNames() end)
-    if not rowNames then return false end
-    local n = 0
-    pcall(function() n = #rowNames end)
-    if n == 0 then return false end
+    retryAttempts = retryAttempts + 1
 
-    Log(string.format("Found %s with %d rows. Scanning for Depot/Garage...",
-        fullname, n))
+    local candidates = FindCandidateBuildingsDTs()
+    local sawAnyMatching = false
 
-    local matchedRows = 0
-    local stepsTouched = 0
-    local materialEntriesZeroed = 0
+    for _, entry in ipairs(candidates) do
+        local dt = entry.dt
+        local fullname = entry.fullname
+        local rowNames = nil
+        pcall(function() rowNames = dt:GetRowNames() end)
+        local n = 0
+        if rowNames then pcall(function() n = #rowNames end) end
+        if n == 0 then
+            -- DT exists but rows haven't streamed in yet. Don't mark
+            -- as inspected — try it again on the next retry.
+            goto continue
+        end
 
-    for i = 1, n do
-        local rowName = rowNames[i]
-        local rowNameStr = ""
-        pcall(function() rowNameStr = tostring(rowName) end)
-        if MatchesRow(rowNameStr) then
-            local row = nil
-            pcall(function() row = dt:FindRow(rowName, "FreeDepotConstruction", false) end)
-            if row then
-                matchedRows = matchedRows + 1
-                local steps = SafeGet(row, "Steps")
-                if steps then
-                    local stepCount = 0
-                    pcall(function() stepCount = #steps end)
-                    for s = 1, stepCount do
-                        local step = steps[s]
-                        if step then
-                            local mats = SafeGet(step, "Materials")
-                            local z = ZeroMaterialsMap(mats)
-                            if z > 0 then
-                                stepsTouched = stepsTouched + 1
-                                materialEntriesZeroed = materialEntriesZeroed + z
+        -- Now we have a populated candidate. Mark inspected so we
+        -- don't re-log the same "Found / scanning" pair every 5s
+        -- for a DT that doesn't contain depot rows.
+        inspectedDTs[fullname] = true
+
+        local matchedRows = 0
+        local stepsTouched = 0
+        local materialEntriesZeroed = 0
+        for i = 1, n do
+            local rowName = rowNames[i]
+            local rowNameStr = ""
+            pcall(function() rowNameStr = tostring(rowName) end)
+            if MatchesRow(rowNameStr) then
+                local row = nil
+                pcall(function() row = dt:FindRow(rowName, "FreeDepotConstruction", false) end)
+                if row then
+                    matchedRows = matchedRows + 1
+                    local steps = SafeGet(row, "Steps")
+                    if steps then
+                        local stepCount = 0
+                        pcall(function() stepCount = #steps end)
+                        for s = 1, stepCount do
+                            local step = steps[s]
+                            if step then
+                                local mats = SafeGet(step, "Materials")
+                                local z = ZeroMaterialsMap(mats)
+                                if z > 0 then
+                                    stepsTouched = stepsTouched + 1
+                                    materialEntriesZeroed = materialEntriesZeroed + z
+                                end
                             end
                         end
                     end
                 end
-                Log(string.format("  Row %s -> processed (%d steps with materials)",
-                    rowNameStr, stepsTouched))
             end
         end
+
+        if matchedRows > 0 then
+            sawAnyMatching = true
+            Log(string.format(
+                "Applied to %s: %d depot/garage rows zeroed across %d steps (%d material entries = 0).",
+                fullname, matchedRows, stepsTouched, materialEntriesZeroed))
+            applied = true
+            return true
+        else
+            -- This DT has rows but none look like depot/garage —
+            -- log once and move on.
+            Log(string.format(
+                "Inspected %s (%d rows) — no depot/garage rows. Skipping this DT.",
+                fullname, n))
+        end
+        ::continue::
     end
 
-    if matchedRows == 0 then
-        Log("No Depot or Garage rows matched — DT may use different naming on this build. Retrying.")
-        return false
+    -- Retry budget exhausted? Give up loudly so the user knows
+    -- whether the mod found anything at all.
+    if retryAttempts >= CONFIG.MaxRetries then
+        if sawAnyMatching then
+            applied = true  -- shouldn't reach here, but defensive
+            return true
+        end
+        Log(string.format(
+            "Gave up after %d attempts. No DataTable on this build had "
+            .. "rows whose names contain 'depot' or 'garage'. The mod "
+            .. "is now idle. If your build's construction-cost DT lives "
+            .. "outside /Game/.../Buildings/, report the actual DT path "
+            .. "so we can extend the candidate match.",
+            retryAttempts))
+        applied = true  -- stop the LoopAsync
+        return true
     end
 
-    Log(string.format("Done: %d depot/garage rows zeroed across %d steps (%d material entries set to 0).",
-        matchedRows, stepsTouched, materialEntriesZeroed))
-    applied = true
-    return true
+    return false  -- caller will retry
 end
 
 Log("=== Cryovac Free Depot Construction Loading ===")
