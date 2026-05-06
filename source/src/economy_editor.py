@@ -683,6 +683,7 @@ def load_economy_settings() -> Dict[str, Any]:
         'vehicle_custom': False,
         'capacity_scaling_mode': 'Vanilla',
         'profit_share': '5% (Vanilla)',
+        'profit_share_multiplier': 1.0,
         'custom_cargo_overrides': {},
         'custom_ini_overrides': {},
     }
@@ -822,12 +823,30 @@ def apply_all_economy_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         results['balance_ini'] = f'error: {e}'
 
-    # 4. Profit share preset was removed — VehicleOwnerProfitShare in
-    # the balance INI applies globally per vehicle class and so
-    # affected every matching vehicle in the world, including ones
-    # the player doesn't own (rentals, AI-company trucks). Any
-    # legacy profit_share value in `settings` is ignored.
-    results['profit_share'] = 'skipped (feature removed)'
+    # 4. Profit share multiplier (re-introduced as a v7 INI write
+    # after the runtime-Lua replacement turned out unreliable on
+    # current MT builds). VehicleOwnerProfitShare in the balance
+    # INI applies GLOBALLY per vehicle class — it scales the share
+    # for every matching vehicle in the world, including rentals
+    # and AI-company trucks. The UI surfaces this trade-off; users
+    # who want strict per-company scoping wait for the Lua hook
+    # path to be confirmed working on their build.
+    try:
+        profit_mult = settings.get('profit_share_multiplier')
+        if profit_mult is not None:
+            try:
+                profit_mult_f = float(profit_mult)
+            except (TypeError, ValueError):
+                profit_mult_f = 1.0
+            if abs(profit_mult_f - 1.0) > 0.001:
+                pr_result = apply_profit_share_multiplier(profit_mult_f)
+                results['profit_share'] = pr_result
+            else:
+                results['profit_share'] = 'no-op (1.0x)'
+        else:
+            results['profit_share'] = 'no-op (not set)'
+    except Exception as e:
+        results['profit_share'] = f'error: {e}'
 
     # 5. Save settings for next session
     save_economy_settings(settings)

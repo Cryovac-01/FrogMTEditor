@@ -118,7 +118,13 @@ def _ensure_loaded() -> None:
     # Order here is the display order in the UI panel.
     from . import cargo_scaling                 # noqa: F401
     from . import cargo_volume_boost            # noqa: F401
-    from . import company_profit_boost          # noqa: F401
+    # company_profit_boost retired in v7.1: the runtime-Lua scoped
+    # profit-share path turned out unreliable (MTCompany owner-GUID
+    # field not exposed on current MT builds, AI delivery RPC name
+    # unknown). The functionality moved back to the Economy Editor
+    # as an INI write of VehicleOwnerProfitShare — globally scoped,
+    # with a clear UI warning that rentals + AI-company vehicles
+    # are also affected.
     from . import company_vehicle_care          # noqa: F401
     from . import company_vehicle_limits        # noqa: F401
     from . import exp_multiplier                # noqa: F401
@@ -128,7 +134,12 @@ def _ensure_loaded() -> None:
     from . import engine_volume                 # noqa: F401
     from . import production_storage_boost      # noqa: F401
     from . import contract_payment_boost        # noqa: F401
-    from . import free_depot_construction       # noqa: F401
+    # free_depot_construction retired in v7.1: the runtime-Lua DT
+    # rewrite couldn't locate the right step/requirements field
+    # shape on Buildings_Houses on this build, and a .pak version
+    # would require a Buildings DataTable parser + repack we
+    # haven't built. Users wanting zero-cost depots should use a
+    # Nexus pak mod for now.
 
 
 # Shared default output directory. Mirrors what cargo_scaling_deployer used

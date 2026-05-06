@@ -265,6 +265,43 @@ class EconomyEditorPanel(QtWidgets.QWidget):
             card = self._build_slider_card(eyebrow, title, desc, key)
             scroll_layout.addWidget(card)
 
+        # -- Vehicle Owner Profit Share (with caveats) ---------------
+        # This writes VehicleOwnerProfitShare in the balance INI and
+        # is therefore GLOBAL per vehicle class — every matching
+        # vehicle in the world gets the boosted share, including
+        # rentals and AI-company trucks. The runtime-Lua scoped
+        # version turned out unreliable on current MT builds, so
+        # we fall back to the proven INI write here, with a clear
+        # warning to the user.
+        profit_card = self._build_slider_card(
+            _t("COMPANY OWNER PROFIT SHARE"),
+            _t("Vehicle Owner Profit Share Multiplier"),
+            _t("Scales the share of each delivery's payout that goes "
+               "to the vehicle owner's company. Vanilla is roughly "
+               "5% in-game; 2.0× ≈ 10%, 5.0× ≈ 25%."),
+            "profit_share",
+            min_val=1.0, max_val=5.0, step=0.1, default=1.0,
+        )
+        # Hide the Custom checkbox — we don't expose per-vehicle-class
+        # overrides for profit share. The slider is the only knob.
+        try:
+            self.profit_share_custom.setVisible(False)
+        except Exception:
+            pass
+        # Append the warning the user explicitly asked for.
+        warning_label = _label(
+            _t("⚠ This setting applies GLOBALLY per vehicle class. "
+               "Increasing the multiplier also boosts the profit share "
+               "for RENTAL vehicles and AI-company trucks — not just "
+               "your own. Best practice: only enable above 1.0× when "
+               "you exclusively drive vehicles you actually own. "
+               "Setting it back to 1.0× restores vanilla behaviour."),
+            "warning",
+        )
+        warning_label.setWordWrap(True)
+        profit_card.layout().addWidget(warning_label)
+        scroll_layout.addWidget(profit_card)
+
         # -- Cargo Payment Preview Table -----------------------------------
         cargo_card = QtWidgets.QFrame()
         cargo_card.setStyleSheet(f"""
@@ -580,9 +617,15 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         # now (see lua_mods/cargo_scaling.py). Legacy values here are
         # ignored on load.
 
-        # profit_share was removed from the panel — the preset was
-        # global per vehicle class, affecting non-owned vehicles too.
-        # Legacy values saved here are ignored on load.
+        # profit_share multiplier — restored as a v7+ INI write since
+        # the runtime-Lua scoped path is unreliable. The slider is
+        # always visible (no Custom checkbox); load just the saved
+        # multiplier value.
+        try:
+            saved_profit = float(settings.get('profit_share_multiplier', 1.0))
+        except (TypeError, ValueError):
+            saved_profit = 1.0
+        self._set_slider_value('profit_share', saved_profit)
 
         # Load any saved custom overrides
         self._custom_cargo_values = dict(settings.get('custom_cargo_overrides', {}))
@@ -817,6 +860,9 @@ class EconomyEditorPanel(QtWidgets.QWidget):
             settings[f'{key}_custom'] = getattr(self, f'{key}_custom').isChecked()
         settings['custom_cargo_overrides'] = self._custom_cargo_values
         settings['custom_ini_overrides'] = self._custom_ini_values
+        # Profit share multiplier — applies globally per vehicle class
+        # (see warning under the slider in the UI).
+        settings['profit_share_multiplier'] = self._get_slider_value('profit_share')
 
         # Check if vanilla paths are set before applying
         if not eco.vanilla_paths_ok():
