@@ -115,44 +115,43 @@ def find_cargo_arrays(uexp_bytes: bytes) -> List[CargoArray]:
     return found
 
 
-_SAND_ENTRY_INDEX = 1  # See module docstring + verified against in-game UI
-
-
 def zero_all_quantities(uexp_bytes: bytes,
-                        sand_token_qty: int = 1) -> Tuple[bytes, List[CargoArray]]:
-    """Return a copy of *uexp_bytes* with construction costs reduced to
-    "1 unit of Sand only", plus the list of arrays touched.
+                        token_qty: int = 1) -> Tuple[bytes, List[CargoArray]]:
+    """Return a copy of *uexp_bytes* with every construction-cost
+    quantity reduced to a token value (default 1), plus the list of
+    arrays touched.
 
-    Why not just set every quantity to 0:
+    Why every entry gets a token instead of just one:
       Motor Town's construction state machine advances on delivery
       events — when a player delivers cargo to a construction site,
       the state machine fires "step delivered" and progresses toward
-      "construction finished". With every requirement set to 0 the
-      construction site can never receive a delivery (the slot is
-      already full at 0/0), so the state machine never fires the
-      completion event, and the building stays stuck in 'in progress'
-      forever.
+      "construction finished". With requirements at 0, no delivery
+      can fire (the slot is already full at 0/0), so the completion
+      event never triggers and the building stays stuck.
 
-      Verified empirically by the user in v7.x testing.
+      Earlier attempts left a token requirement on a single entry
+      (the assumed Sand position), but that produced inconsistent
+      results — likely because (a) Motor Town's construction has
+      multiple steps that each need their own delivery event, and/or
+      (b) the array entry order doesn't reliably match the in-game
+      UI order, so picking "the Sand slot" was a guess.
 
-    The fix:
-      In each detected cargo array, force the entry at the canonical
-      Sand position (index 1 — confirmed against the in-game
-      Construction UI which lists materials in order
-      Concrete, Sand, WoodPlank, HBeam, PlasticPipes) to a token
-      quantity of 1 unit, and zero out every other entry. The player
-      then needs to deliver exactly 1 Sand to complete a depot or
-      garage. Sand is one of the cheapest cargoes in MT and any
-      industrial pickup carries plenty, so this is effectively free
-      construction without breaking the vanilla state machine.
+      Setting EVERY entry to 1 sidesteps both unknowns: the player
+      delivers one of each cargo type (5 trivial deliveries), every
+      step's every requirement gets satisfied, and the vanilla
+      completion flow fires reliably.
+
+    Practical effect on a depot/garage construction site:
+      All 5 materials show 0/1. Drop one of each from any industrial
+      pickup. Construction completes. Total cost: ~5 cargo units of
+      whatever the cheapest available items are.
 
     Args:
-      uexp_bytes:     the original .uexp content
-      sand_token_qty: the token quantity left on the Sand entry.
-                      Default 1 ("near-free"). Pass 0 to truly zero
-                      everything (gives stuck construction sites —
-                      only useful if paired with a runtime Lua mod
-                      that force-completes them).
+      uexp_bytes: the original .uexp content
+      token_qty:  the quantity left on every entry. Default 1
+                  ("effectively free"). Pass 0 to truly zero
+                  everything (results in stuck construction sites,
+                  per the state-machine behaviour described above).
 
     The .uasset doesn't need updating — only int32 values inside the
     .uexp change, all sizes and offsets stay identical.
@@ -162,12 +161,8 @@ def zero_all_quantities(uexp_bytes: bytes,
         return uexp_bytes, []
     buf = bytearray(uexp_bytes)
     for arr in arrays:
-        for i, off in enumerate(arr.entry_offsets):
-            if i == _SAND_ENTRY_INDEX:
-                new_qty = sand_token_qty
-            else:
-                new_qty = 0
-            struct.pack_into('<i', buf, off, new_qty)
+        for off in arr.entry_offsets:
+            struct.pack_into('<i', buf, off, token_qty)
     return bytes(buf), arrays
 
 
