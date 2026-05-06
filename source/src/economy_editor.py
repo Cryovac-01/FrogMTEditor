@@ -104,16 +104,22 @@ def _auto_discover_vanilla_paths() -> None:
         except Exception:
             pass
 
-    # 2. Build candidate directories — most specific first
+    # 2. Build candidate directories. Bundled data/vanilla/ comes
+    #    FIRST so the editor works out of the box without an unpacked
+    #    Motor Town folder. Users who want always-fresh vanilla
+    #    values from the latest MT patch can override by clicking
+    #    'Select Unpacked Folder' in the Economy panel — that calls
+    #    set_vanilla_root() and the explicit choice wins over
+    #    auto-discovery.
     candidates = []
+    # Bundled vanilla data inside the project
+    candidates.append(os.path.join(_PROJECT_ROOT, 'data', 'vanilla'))
     # Sibling "Unpacked" folder at various levels up from project root
     for levels in range(1, 5):
         up = _PROJECT_ROOT
         for _ in range(levels):
             up = os.path.dirname(up)
         candidates.append(os.path.join(up, 'Unpacked'))
-    # Inside project data
-    candidates.append(os.path.join(_PROJECT_ROOT, 'data', 'vanilla'))
     # CWD-based (user may run from the folder containing Unpacked)
     candidates.append(os.path.join(os.getcwd(), 'Unpacked'))
     # Direct check: maybe the project root itself contains MotorTown/

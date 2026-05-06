@@ -60,13 +60,32 @@ def _atomic_write_bin(path: str, data: bytes) -> None:
 
 
 def _discover_vanilla() -> bool:
-    """Find vanilla Policies.uasset/.uexp in the Unpacked folder."""
+    """Find vanilla Policies.uasset/.uexp.
+
+    Priority:
+      1. data/vanilla/Policies.uasset|.uexp (bundled with editor —
+         no unpacking required)
+      2. <Unpacked>/MotorTown/Content/DataAsset/Policies.uasset|.uexp
+         under sibling project folders (fallback)
+    """
     global _vanilla_uasset, _vanilla_uexp
     if _vanilla_uasset and _vanilla_uexp:
         if os.path.isfile(_vanilla_uasset) and os.path.isfile(_vanilla_uexp):
             return True
 
-    # Search relative to project root
+    # 1. Bundled copy in data/vanilla/ — preferred path (works
+    #    out of the box with no unpacked folder)
+    bundled_dir = os.path.join(_PROJECT_ROOT, 'data', 'vanilla')
+    bundled_ua = os.path.join(bundled_dir, 'Policies.uasset')
+    bundled_ue = os.path.join(bundled_dir, 'Policies.uexp')
+    if os.path.isfile(bundled_ua) and os.path.isfile(bundled_ue):
+        _vanilla_uasset = bundled_ua
+        _vanilla_uexp = bundled_ue
+        logger.info("Using bundled vanilla policies: %s", bundled_ua)
+        return True
+
+    # 2. Sibling Unpacked folders (fallback for users who manually
+    #    deleted the bundled copy or want always-fresh values)
     candidates = []
     for levels in range(1, 5):
         up = _PROJECT_ROOT
@@ -82,7 +101,7 @@ def _discover_vanilla() -> bool:
         if os.path.isfile(ua) and os.path.isfile(ue):
             _vanilla_uasset = ua
             _vanilla_uexp = ue
-            logger.info("Found vanilla policies: %s", ua)
+            logger.info("Found vanilla policies (unpacked): %s", ua)
             return True
 
     logger.warning("Could not find vanilla Policies files.")
