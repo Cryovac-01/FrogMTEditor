@@ -148,26 +148,73 @@ def patch_buildings_uexp(input_path: str, output_path: str) -> Tuple[int, int]:
     return len(arrays), total_zeroed
 
 
-def deploy_free_construction(unpacked_root: str, mod_tree_root: str) -> dict:
-    """End-to-end deploy: copy + patch every Buildings* .uexp from
-    the unpacked vanilla tree into the mod tree, with all cargo
-    quantities zeroed. The matching .uasset files are copied
-    unchanged (they don't need patching — we only changed values
-    inside the .uexp, not its size).
+def _resolve_buildings_source_dir(unpacked_root: str = '') -> str:
+    """Pick the source directory that holds vanilla Buildings_*.uasset/.uexp.
+
+    Priority:
+      1. <project>/data/vanilla/Buildings/  (bundled with the editor —
+         no unpacking required, works out of the box)
+      2. <unpacked_root>/MotorTown/Content/DataAsset/Buildings/
+         (fall back when the user has set an Unpacked folder; this
+         is the always-fresh path that picks up MT updates)
+
+    The bundled copy is preferred because the binary structure of
+    Buildings_Houses construction-cost arrays has been stable across
+    Motor Town releases and the patch we apply (zeroing int32
+    quantities) doesn't add or remove rows, so a slightly stale
+    vanilla snapshot is still safe. If the bundled file is missing
+    AND no unpacked folder is set, the function returns ''.
+    """
+    # 1. Bundled copy at <project>/data/vanilla/Buildings/
+    proj_root = os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__)
+    )))
+    bundled = os.path.join(proj_root, 'data', 'vanilla', 'Buildings')
+    if os.path.isdir(bundled) and any(
+        f.startswith('Buildings_Houses') for f in os.listdir(bundled)
+    ):
+        return bundled
+    # 2. Unpacked folder
+    if unpacked_root:
+        candidate = os.path.join(unpacked_root, 'MotorTown', 'Content',
+                                 'DataAsset', 'Buildings')
+        if os.path.isdir(candidate):
+            return candidate
+    return ''
+
+
+def deploy_free_construction(unpacked_root: str = '',
+                             mod_tree_root: str = '') -> dict:
+    """End-to-end deploy: read vanilla Buildings_*.uasset/.uexp, zero
+    all construction-cargo quantities, and write the result into the
+    mod tree. Pack Mod picks them up automatically.
 
     Args:
-      unpacked_root: path to <Motor Town>/MotorTown/Content/...
-                     (typically the user's "Select Unpacked Folder")
-      mod_tree_root: path to <project>/data/mod/MotorTown/Content/...
-                     (where Pack Mod will pick up the changes)
+      unpacked_root: optional path to <Motor Town>/. Used as a
+                     fallback source if the editor doesn't have
+                     bundled vanilla Buildings files. Most users
+                     don't need to set this — the editor ships with
+                     the vanilla files in data/vanilla/Buildings/.
+      mod_tree_root: required. Path to <project>/data/mod/. The mod
+                     Buildings folder is created under
+                     <mod_tree_root>/MotorTown/Content/DataAsset/Buildings/.
 
-    Returns a dict with success/error info + per-file stats.
+    Returns a dict with success/error info + per-file stats. The
+    returned dict's `source` key tells the caller whether the
+    bundled vanilla copy or the user's unpacked folder was used.
     """
-    src_dir = os.path.join(unpacked_root, 'MotorTown', 'Content',
-                           'DataAsset', 'Buildings')
-    if not os.path.isdir(src_dir):
-        return {'success': False,
-                'error': f'Buildings DataAsset folder not found at {src_dir!r}'}
+    src_dir = _resolve_buildings_source_dir(unpacked_root)
+    if not src_dir:
+        return {
+            'success': False,
+            'error': (
+                'Vanilla Buildings DataTable not available. The editor '
+                'usually ships with this in data/vanilla/Buildings/. If '
+                'that folder is missing in your install, point the '
+                'Economy panel at your unpacked Motor Town folder and '
+                'try again.'
+            ),
+        }
 
     dst_dir = os.path.join(mod_tree_root, 'MotorTown', 'Content',
                            'DataAsset', 'Buildings')
@@ -203,4 +250,5 @@ def deploy_free_construction(unpacked_root: str, mod_tree_root: str) -> dict:
         'quantities_zeroed': total_zeroed,
         'files': per_file,
         'mod_tree_path': dst_dir,
+        'source': src_dir,
     }

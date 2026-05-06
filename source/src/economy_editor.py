@@ -856,25 +856,26 @@ def apply_all_economy_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
 
     # 5. Free building construction (zero-cost depots/garages via
     # patched Buildings DataTable). Replaces the unreliable Lua mod.
+    # The editor bundles vanilla Buildings_Houses.uasset/.uexp under
+    # data/vanilla/Buildings/, so this feature works WITHOUT an
+    # unpacked Motor Town folder. If the bundled files are missing
+    # from a stripped-down install, the deploy falls back to the
+    # user's unpacked folder (derived from the balance INI path).
     try:
         if settings.get('free_buildings'):
             from parsers.uexp_buildings_dt import deploy_free_construction
-            # Derive the unpacked root from the cached vanilla balance
-            # path: it's typically <root>/MotorTown/Config/DefaultMotorTownBalance.ini,
-            # so the root is two parents up.
-            unpacked_root = None
+            # Optional fallback: derive unpacked_root from the cached
+            # vanilla balance INI path (two parents up). Only used if
+            # the bundled vanilla Buildings copy is missing.
+            unpacked_root = ''
             if _vanilla_balance_ini:
-                unpacked_root = os.path.dirname(os.path.dirname(
+                derived = os.path.dirname(os.path.dirname(
                     os.path.dirname(_vanilla_balance_ini)
                 ))
-            if not unpacked_root or not os.path.isdir(unpacked_root):
-                results['free_buildings'] = (
-                    "error: unpacked game folder not set; "
-                    "click 'Select Unpacked Folder' in the Economy panel."
-                )
-            else:
-                fb_result = deploy_free_construction(unpacked_root, MOD_ROOT)
-                results['free_buildings'] = fb_result
+                if os.path.isdir(derived):
+                    unpacked_root = derived
+            fb_result = deploy_free_construction(unpacked_root, MOD_ROOT)
+            results['free_buildings'] = fb_result
         else:
             results['free_buildings'] = 'disabled'
     except Exception as e:

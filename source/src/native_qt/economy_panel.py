@@ -291,7 +291,9 @@ class EconomyEditorPanel(QtWidgets.QWidget):
             "deliveries needed. Houses with construction costs are also "
             "freed (most houses are already free in vanilla). The "
             "patched .uasset/.uexp files are written into the mod tree "
-            "and packed automatically when you click Pack Mod."
+            "and packed automatically when you click Pack Mod.\n\n"
+            "This feature ships with bundled vanilla data — no unpacked "
+            "Motor Town folder is required."
         ), "muted"))
         self.free_buildings_cb = QtWidgets.QCheckBox(
             _t("Enable free construction (Depots, Garages, all buildings)")
@@ -925,8 +927,23 @@ class EconomyEditorPanel(QtWidgets.QWidget):
         # patched Buildings DataTable).
         settings['free_buildings'] = self.free_buildings_cb.isChecked()
 
-        # Check if vanilla paths are set before applying
-        if not eco.vanilla_paths_ok():
+        # Check if vanilla paths are set before applying.
+        # Free Building Construction ships with bundled vanilla data —
+        # it doesn't need the unpacked folder. Every OTHER feature
+        # (cargo overrides, INI multipliers, profit-share scaling)
+        # reads from Balance.json / DefaultMotorTownBalance.ini in the
+        # unpacked tree, so those still gate behind vanilla_paths_ok.
+        needs_unpacked = (
+            settings.get('custom_cargo_overrides')
+            or settings.get('custom_ini_overrides')
+            or any(
+                abs(settings.get(f'{k}_multiplier', 1.0) - 1.0) > 0.01
+                or settings.get(f'{k}_custom', False)
+                for k in ('economy', 'bus', 'taxi', 'ambulance', 'fuel', 'vehicle')
+            )
+            or abs(settings.get('profit_share_multiplier', 1.0) - 1.0) > 0.01
+        )
+        if needs_unpacked and not eco.vanilla_paths_ok():
             self.status_label.setText(
                 _t("Cannot apply: unpacked game files not found. "
                 "Click 'Select Unpacked Folder' above.")
