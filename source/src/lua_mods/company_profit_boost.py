@@ -245,17 +245,23 @@ local function RefreshOwnedCompanies()
             -- Field name worked but no companies matched the local
             -- player's character GUID — they don't own any company yet.
             Log("No owned companies (matched field: " .. ownerGuidField
-                .. ") — found a player but no company they own.")
+                .. ") — found a player but no company they own. "
+                .. "Will fall back to local-controller match on hook fire.")
         else
             -- Every candidate field returned nil. This MT build doesn't
             -- expose the company-owner GUID under any name we know
-            -- about. The mod can't identify owned vehicles, so the
-            -- profit-share boost will never fire. Warn loudly once.
-            Log("WARNING: could not locate the MTCompany owner-GUID field "
-                .. "on this game build (tried: OwnerCharacterGuid, "
-                .. "FounderCharacterGuid). The profit-share boost will "
-                .. "not fire. Report this to Frog Mod Editor with your "
-                .. "MT build number so we can add the right field name.")
+            -- about. We fall back to a controller-match heuristic at
+            -- hook time: if the RPC's `self` is the local player's
+            -- controller, we boost. That's correct in single-player
+            -- and accurate enough for self-hosting (the host's own
+            -- deliveries get boosted, no one else's), and degrades
+            -- to no-op on a dedicated server with no local player.
+            Log("MTCompany owner-GUID field not exposed on this build. "
+                .. "Falling back to local-controller match: deliveries "
+                .. "made by the local player are boosted; deliveries "
+                .. "from other players on the same server are not. "
+                .. "Single-player + self-host work correctly. Dedicated "
+                .. "servers with no local player will not boost anything.")
         end
     end
 end
@@ -270,6 +276,17 @@ local function IsOwnedByMyCompany(vehicle)
         end
     end
     return false, nil
+end
+
+-- Fallback ownership check used when MTCompany discovery fails.
+-- Compares the hook's `self` PlayerController to the local player's
+-- controller — if they match, the RPC was triggered by the local
+-- player's own delivery, so the boost is correct to apply. This
+-- bypasses MTCompany entirely.
+local function IsHookCallerLocalPlayer(hookSelf)
+    if not hookSelf then return false end
+    local ok, isLocal = pcall(function() return hookSelf:IsLocalController() end)
+    return ok and isLocal == true
 end
 
 -- ============================================================
@@ -290,8 +307,25 @@ local function SetupHook()
                 local vehicle = Unwrap(vehicleWrap)
                 if not vehicle then return end
 
+                -- Primary path: company-membership check. Works when
+                -- MTCompany's owner-GUID field is reflectable.
                 local matched, company = IsOwnedByMyCompany(vehicle)
+                local matchKind = "company"
+                local matchLabel = nil
+
+                -- Fallback path: if we have NO owned-company list (either
+                -- the discovery failed entirely, or the player hasn't
+                -- founded a company yet), fall back to "the hook's self
+                -- is the local player's controller". This is correct
+                -- for single-player + self-host scenarios.
+                if not matched and #ownedCompanies == 0 and IsHookCallerLocalPlayer(self) then
+                    matched = true
+                    matchKind = "local-controller"
+                    company = nil
+                end
+
                 if not matched then return end
+                matchLabel = company and tostring(company.name) or "(local player)"
 
                 local money = Unwrap(moneyWrap) or 0
                 if type(money) ~= "number" or money <= 0 then return end
@@ -308,8 +342,8 @@ local function SetupHook()
                 end)
                 if setOk then
                     Log(string.format(
-                        "boost applied: %d -> %d (x%.2f) company=%s",
-                        money, boosted, CONFIG.Multiplier, tostring(company.name)))
+                        "boost applied: %d -> %d (x%.2f) match=%s/%s",
+                        money, boosted, CONFIG.Multiplier, matchKind, matchLabel))
                 else
                     Log("param :set() failed: " .. tostring(setErr)
                         .. " (vanilla payout unchanged)")
