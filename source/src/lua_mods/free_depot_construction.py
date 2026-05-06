@@ -109,15 +109,12 @@ local function SafeGet(obj, prop)
 end
 
 -- Class names to look for via FindAllOf. Specific blueprint
--- subclasses come first (cheap reject of non-matches); we also
--- include candidate base classes in case future MT builds rename
--- the specific subclasses.
+-- subclasses come first; base-class candidates catch renamed variants.
 local CLASS_CANDIDATES = {{
     "Depot_01_Construction_C",
     "Depot_02_Construction_C",
     "LargeGarage_01_Construction_C",
     "Garage_01_Construction_C",
-    -- Possible base classes
     "MTBuildingConstruction_C",
     "MTBuildingConstruction",
     "MTConstructionSite",
@@ -125,24 +122,61 @@ local CLASS_CANDIDATES = {{
 }}
 
 -- Methods we'll try calling (in order) to force completion.
+-- An empty paren `(actor)` arg list = method with implicit self.
+-- Order: most specific names first, then progressively more
+-- generic. We also include UE5 BP-event K2_ prefix variants and
+-- the OnRep_ replication-callback names that fire state-change
+-- handlers when a replicated bool flips.
 local COMPLETE_METHOD_CANDIDATES = {{
-    "CompleteConstruction",
-    "ServerCompleteConstruction",
-    "OnAllMaterialsDelivered",
-    "OnConstructionCompleted",
-    "FinishConstruction",
-    "Complete",
-    "Finish",
+    -- Specific completion functions
+    "CompleteConstruction", "ServerCompleteConstruction",
+    "OnAllMaterialsDelivered", "OnConstructionCompleted",
+    "FinishConstruction", "ServerFinishConstruction",
+    "Server_FinishConstruction", "Server_CompleteConstruction",
+    "Server_OnConstructionFinished", "Server_FinishBuild",
+    "Server_OnAllMaterialsDelivered", "Server_OnStepCompleted",
+    -- Step / phase advancement
+    "AdvanceStep", "AdvanceConstructionStep", "NextStep",
+    "OnStepCompleted", "ProgressToNextStep",
+    "Server_AdvanceStep", "Server_NextStep",
+    -- Build / construct verbs
+    "Build", "BuildComplete", "OnBuildComplete",
+    "FinishBuild", "OnFinishBuild", "K2_OnBuildComplete",
+    -- BP event variants (UE5 BlueprintImplementableEvents
+    -- typically expose with a K2_ prefix from C++)
+    "K2_CompleteConstruction", "K2_FinishConstruction",
+    "K2_OnConstructionCompleted",
+    -- OnRep replication callbacks (fires state-change handlers
+    -- AFTER the corresponding flag is set)
+    "OnRep_bIsCompleted", "OnRep_bIsConstructed",
+    "OnRep_IsCompleted", "OnRep_Completed",
+    "OnRep_ConstructionState", "OnRep_State",
+    -- Spawn-finished-building helpers
+    "SpawnFinishedBuilding", "SpawnCompletedActor",
+    "ServerSpawnFinishedBuilding", "Server_SpawnCompletedActor",
+    -- Generic verbs as a last-ditch
+    "Complete", "Finish", "Trigger", "Execute",
 }}
 
 -- Boolean flags we'll try setting to true to mark completed.
 local COMPLETED_FLAG_CANDIDATES = {{
-    "bIsCompleted",
-    "bIsConstructed",
-    "bConstructionFinished",
-    "bConstructionComplete",
-    "bIsBuilt",
-    "bFinished",
+    "bIsCompleted", "bIsConstructed",
+    "bConstructionFinished", "bConstructionComplete",
+    "bIsBuilt", "bFinished", "bComplete",
+    "bAllMaterialsDelivered", "bIsFinishedConstruction",
+}}
+
+-- Numeric "current step" / "progress" fields. We push these to
+-- a high value so any step-comparison logic skips ahead.
+local STEP_FIELD_CANDIDATES = {{
+    "CurrentStep", "CurrentStepIndex", "StepIndex",
+    "CurrentPhase", "PhaseIndex", "ConstructionStep",
+}}
+
+-- Numeric "time remaining" fields we push to 0 to skip timed waits.
+local TIMER_FIELD_CANDIDATES = {{
+    "RemainingTime", "RemainingBuildTime", "BuildTimeLeft",
+    "ConstructionTimeRemaining", "TimeToComplete",
 }}
 
 -- Track which actors we've already completed so we don't redo them.
@@ -154,49 +188,56 @@ local cachedMethod = nil
 local cachedFlag = nil
 
 local function GetActorKey(actor)
-    -- Use the full path as a stable identity (FName + memory address
-    -- both vary per session, so we use the full Outer/Name path which
-    -- stays unique within a session).
     local key = ""
     pcall(function() key = actor:GetFullName() end)
     return key
 end
 
--- Try every candidate completion method on the actor. Returns the
--- name of the method that fired, or nil if none worked.
+-- Aggressive multi-strategy completion attempt. Tries everything in
+-- sequence; returns the list of strategies that ran without error.
+-- We don't stop at the first success because the construction actor
+-- typically needs MULTIPLE state changes to fully transition (flag
+-- + step + method), and setting flags alone isn't enough on its own.
 local function TryComplete(actor)
-    -- Cache hit: try the previously-successful method first
+    local applied = {{}}
+
+    -- 1. Set every plausible "completed" boolean flag
+    for _, f in ipairs(COMPLETED_FLAG_CANDIDATES) do
+        local ok = pcall(function() actor[f] = true end)
+        if ok then applied[#applied + 1] = "flag:" .. f end
+    end
+
+    -- 2. Push every step counter to 9999 so step-comparison logic
+    --    (current >= total) trivially passes
+    for _, f in ipairs(STEP_FIELD_CANDIDATES) do
+        local ok = pcall(function() actor[f] = 9999 end)
+        if ok then applied[#applied + 1] = "step:" .. f end
+    end
+
+    -- 3. Zero every plausible timer field
+    for _, f in ipairs(TIMER_FIELD_CANDIDATES) do
+        local ok = pcall(function() actor[f] = 0 end)
+        if ok then applied[#applied + 1] = "timer:" .. f end
+    end
+
+    -- 4. Try every candidate completion method/RPC. The order
+    --    matters somewhat — flag-set above lets OnRep_ callbacks
+    --    see the flipped value when fired here.
     if cachedMethod then
         local ok = pcall(function() actor[cachedMethod](actor) end)
-        if ok then return cachedMethod end
+        if ok then applied[#applied + 1] = "method:" .. cachedMethod end
     end
-    -- Try each candidate
     for _, m in ipairs(COMPLETE_METHOD_CANDIDATES) do
         if m ~= cachedMethod then
             local ok = pcall(function() actor[m](actor) end)
             if ok then
-                cachedMethod = m
-                Log("Discovered working completion method: " .. m)
-                return m
+                cachedMethod = cachedMethod or m
+                applied[#applied + 1] = "method:" .. m
             end
         end
     end
-    -- Method approach failed — try setting flag fields
-    if cachedFlag then
-        local ok = pcall(function() actor[cachedFlag] = true end)
-        if ok then return "(flag) " .. cachedFlag end
-    end
-    for _, f in ipairs(COMPLETED_FLAG_CANDIDATES) do
-        if f ~= cachedFlag then
-            local ok = pcall(function() actor[f] = true end)
-            if ok then
-                cachedFlag = f
-                Log("Discovered working completion flag: " .. f)
-                return "(flag) " .. f
-            end
-        end
-    end
-    return nil
+
+    return applied
 end
 
 local successCount = 0
@@ -212,23 +253,31 @@ local function ScanAndComplete()
                 local actor = actors[i]
                 local key = GetActorKey(actor)
                 if key ~= "" and not completedActors[key] then
-                    local result = TryComplete(actor)
-                    if result then
-                        completedActors[key] = true
-                        successCount = successCount + 1
-                        Log(string.format(
-                            "Completed construction site %s via %s "
-                            .. "(class %s)",
-                            key, result, class_name))
+                    local applied = TryComplete(actor)
+                    if applied and #applied > 0 then
+                        -- Don't permanently dedupe — we want subsequent
+                        -- scans to keep poking at sites that didn't
+                        -- actually complete (state machine may need
+                        -- multiple ticks of state pressure).
+                        -- But log once per site so the log doesn't
+                        -- flood every 3 seconds.
+                        if not completedActors[key] then
+                            Log(string.format(
+                                "Pressing %s (class %s) with %d strategies: %s",
+                                key, class_name, #applied,
+                                table.concat(applied, ", ")))
+                            completedActors[key] = true
+                            successCount = successCount + 1
+                        end
                     elseif not failureLogged then
                         failureLogged = true
                         Log(string.format(
                             "Found construction site %s (class %s) but "
-                            .. "no candidate completion method or flag "
-                            .. "worked. Use UE4SS Live View on this "
-                            .. "actor to find the real method/field "
-                            .. "name and report it so the candidate "
-                            .. "list can be extended.",
+                            .. "NO field, flag, or method on this build "
+                            .. "matched our candidate lists. Use UE4SS "
+                            .. "Live View on this actor and report the "
+                            .. "exposed methods + properties so the "
+                            .. "candidate list can be extended.",
                             key, class_name))
                     end
                 end
