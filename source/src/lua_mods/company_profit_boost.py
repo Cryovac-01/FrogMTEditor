@@ -1,19 +1,29 @@
 """Cryovac Company Profit Boost — boosts the owner-profit-share
-payout ONLY on deliveries made in vehicles you own (vehicles whose
-Net_OwnerCompanyGuid matches one of your own companies). Non-company
-vehicles are untouched, so you don't get penalised when driving
-rentals or AI-company rigs.
+payout from AI-DRIVER deliveries made in vehicles your company owns.
+Player-driven deliveries are NOT touched (the Economy Editor's
+cargo-payment multiplier handles those — stacking the two would
+double-multiply). Non-company vehicles are also untouched, so the
+old INI-wide problem of boosting payouts on AI-company / rental
+vehicles you don't own goes away.
 
-Mechanism: pre-hook on
-  /Script/MotorTown.MotorTownPlayerController:ServerGiveOwnerProfitShare
-that mutates the Money parameter in place before vanilla executes.
-When the target vehicle belongs to one of the local player's owned
-companies, Money is rewritten to `floor(money * multiplier)` and the
-vanilla payment logic runs unchanged on the boosted value. Result:
-the on-screen "+$X Owner's Profit Share" popup AND the company
-transaction ledger both show the single boosted number — no ghost
-second-line credit, no ambiguity. At 1.0x the mod is a no-op and
-the hook is never installed."""
+Scope:
+  - AI driver completes delivery in MY company's vehicle → BOOSTED
+  - Player completes delivery in any vehicle              → not touched
+  - AI driver completes delivery in someone else's vehicle → not touched
+
+Mechanism: pre-hook on whichever AI-side profit-share RPC the
+current MT build exposes, mutating the Money parameter in place
+before vanilla executes. Result: the on-screen "+$X Owner's Profit
+Share" popup AND the company transaction ledger both show the
+single boosted number — no ghost second-line credit, no ambiguity.
+
+Hook target discovery: the AI-side RPC name varies across MT
+builds. The mod tries every plausible candidate at startup and
+logs which ones registered. If none fire for AI deliveries, the
+log will be silent on AI events and the user can use UE4SS Live
+View to identify the right function name to add to HOOK_TARGETS.
+
+At 1.0x the mod is a no-op and no hooks are installed."""
 from __future__ import annotations
 
 from typing import Any, Dict
@@ -27,28 +37,33 @@ MOD_NAME = 'CryovacCompanyProfitBoost'
 UI_TITLE = 'Company Profit Boost'
 
 UI_DESCRIPTION = (
-    "Multiplies the owner-profit-share payout from deliveries made in "
-    "your own company\u2019s vehicles. Vehicles you don\u2019t own "
-    "(AI-company, rental, another player\u2019s company) are untouched.\n\n"
-    "When a delivery wraps up, the game fires "
-    "<code>ServerGiveOwnerProfitShare(vehicle, money, type)</code>. "
-    "This mod installs a pre-hook on that RPC: if the vehicle\u2019s "
-    "<code>Net_OwnerCompanyGuid</code> matches a company you own, it "
-    "rewrites the <code>money</code> parameter to "
-    "<code>floor(money \u00d7 multiplier)</code> BEFORE vanilla runs. "
-    "Vanilla then pays out the boosted amount as a single transaction "
-    "\u2014 the on-screen popup and the company ledger both show the "
-    "full boosted number.\n\n"
-    "<b>Player deliveries</b> are always covered. "
-    "<b>AI driver deliveries</b> are covered when their server-side "
-    "profit-share RPC matches one of the candidate targets in the "
-    "mod\u2019s HOOK_TARGETS list. If your AI drivers aren\u2019t "
-    "getting boosted, check the UE4SS log: every successfully-"
-    "registered hook is listed at startup as "
-    "\u201cHooks registered (N): A, B, C\u201d.\n\n"
+    "<b>AI-driver deliveries only.</b> Multiplies the owner-profit-share "
+    "payout when an AI driver hired by YOUR company completes a "
+    "delivery in one of YOUR vehicles. Player deliveries are not "
+    "touched \u2014 the Economy Editor's cargo-payment multiplier handles "
+    "those, and stacking the two would double-multiply. Vehicles "
+    "owned by AI companies, rentals, or other players are also "
+    "untouched (this is the runtime-Lua replacement for the old "
+    "INI-wide profit-share preset, which boosted EVERY company's "
+    "vehicles indiscriminately).\n\n"
+    "How the filter works: when the AI profit-share RPC fires, the "
+    "mod compares the vehicle's <code>Net_OwnerCompanyGuid</code> "
+    "against a list of companies the local player owns. Match \u2192 "
+    "rewrite the Money parameter to <code>floor(money \u00d7 multiplier)</code> "
+    "BEFORE vanilla runs. No match \u2192 leave it untouched.\n\n"
+    "Hook target discovery: the AI-side profit-share function name "
+    "varies across MT builds. The mod tries every plausible "
+    "candidate at startup and logs which ones registered. If your "
+    "AI deliveries still aren't boosted after deploying, open "
+    "<code>UE4SS.log</code> and look for the line "
+    "<code>Hooks registered (N): A, B, C</code> \u2014 that's the list "
+    "of active hooks. If no AI-related entry shows up, use UE4SS "
+    "Live View to find the AI delivery function on this build "
+    "(MTAIController / MTCompanySystem / MotorTownGameMode \u2014 look "
+    "for 'Profit', 'Reward', 'Delivery') and report the name.\n\n"
     "<b>1.0\u00d7</b> \u2014 no change. Mod is a no-op (hooks not installed).<br>"
-    "<b>2.0\u00d7</b> \u2014 deliveries in your own vehicles pay double.<br>"
-    "<b>5.0\u00d7</b> \u2014 deliveries in your own vehicles pay 5\u00d7 vanilla.\n\n"
+    "<b>2.0\u00d7</b> \u2014 AI driver profit shares from your vehicles pay double.<br>"
+    "<b>5.0\u00d7</b> \u2014 AI driver profit shares from your vehicles pay 5\u00d7 vanilla.\n\n"
     "Runs on the SERVER (host / dedicated)."
 )
 
@@ -302,52 +317,58 @@ end
 -- if a target doesn't exist, so the wrong ones drop out and the
 -- right ones (if any) start firing. Add more here as we learn
 -- the actual function names per MT build.
+-- AI-side profit-share hook targets. The player-controller RPC
+-- (MotorTownPlayerController:ServerGiveOwnerProfitShare) is
+-- INTENTIONALLY ABSENT from this list — player cargo income is
+-- the Economy Editor's job, and hooking it here would
+-- double-multiply when both mods are active.
+--
+-- The right AI-side function name varies across MT builds.
+-- UE4SS RegisterHook fails silently for non-existent targets when
+-- wrapped in pcall, so listing every plausible candidate is safe:
+-- the wrong ones drop out, the right one (if present) starts firing.
 local HOOK_TARGETS = {{
-    -- Player-controlled deliveries (confirmed working).
-    "/Script/MotorTown.MotorTownPlayerController:ServerGiveOwnerProfitShare",
-    -- AI driver candidates — these RPCs may not all exist on every
-    -- build. The unsuccessful ones just don't register; pcall keeps
-    -- the others alive.
+    -- AI controller variants
     "/Script/MotorTown.MotorTownAIController:ServerGiveOwnerProfitShare",
     "/Script/MotorTown.MTAIController:ServerGiveOwnerProfitShare",
     "/Script/MotorTown.MTAICharacter:ServerGiveOwnerProfitShare",
+    "/Script/MotorTown.MotorTownAIController:GiveOwnerProfitShare",
+    "/Script/MotorTown.MTAIController:GiveOwnerProfitShare",
+    -- Company-system level (server-side delivery callback)
     "/Script/MotorTown.MTCompanySystem:GiveOwnerProfitShare",
     "/Script/MotorTown.MTCompanySystem:Server_GiveOwnerProfitShare",
+    "/Script/MotorTown.MTCompanySystem:OnAIDeliveryCompleted",
+    "/Script/MotorTown.MTCompanySystem:AddDeliveryProfitShare",
+    -- Game-mode level (catches both player + AI on some builds, but
+    -- our company-membership filter will still skip non-owned
+    -- vehicles, so the mod stays scoped correctly even if this
+    -- catches a player call by accident)
     "/Script/MotorTown.MotorTownGameMode:GiveOwnerProfitShare",
+    "/Script/MotorTown.MotorTownGameMode:OnDeliveryCompleted",
 }}
 
 -- Single shared boost handler used by every successfully-registered
--- hook. self may be a PlayerController, AIController, or CompanySystem
--- depending on which RPC fired — the logic doesn't care, it only
--- reads the vehicle parameter.
+-- hook. `self` may be an AIController, CompanySystem, or GameMode
+-- depending on which RPC fired — the handler only cares about the
+-- vehicle parameter and its owner-company GUID. The local-controller
+-- fallback that earlier versions used is INTENTIONALLY GONE: it was
+-- there to catch the local player's own deliveries, which are no
+-- longer in scope (Economy Editor handles them). For AI deliveries
+-- the company-membership match is the only path, so if MTCompany
+-- field discovery fails, the boost won't fire — and the user sees
+-- the "MTCompany owner-GUID field not exposed" startup warning so
+-- the situation is diagnosable.
 local function BoostHandler(hookName)
     return function(self, vehicleWrap, moneyWrap, txTypeWrap)
         local vehicle = Unwrap(vehicleWrap)
         if not vehicle then return end
 
-        -- Primary path: company-membership check. Works when
-        -- MTCompany's owner-GUID field is reflectable. AI driver
-        -- vehicles are owned by a company, so this catches them too
-        -- as long as discovery succeeded.
+        -- Only path: vehicle's owner-company GUID matches one of the
+        -- local player's owned companies. This is what scopes the
+        -- mod to "MY company's AI vehicles" — vehicles owned by AI
+        -- companies, rentals, or other players never match.
         local matched, company = IsOwnedByMyCompany(vehicle)
-        local matchKind = "company"
-        local matchLabel = nil
-
-        -- Fallback path: when ownedCompanies is empty (MTCompany
-        -- field not reflectable on this build), check whether the
-        -- hook's `self` is the local player's controller. AI driver
-        -- hooks won't pass this check — `self` would be the AI
-        -- controller, not the local player — so AI deliveries only
-        -- get boosted via the company-membership path. The fallback
-        -- exclusively serves human-driver single-player + self-host.
-        if not matched and #ownedCompanies == 0 and IsHookCallerLocalPlayer(self) then
-            matched = true
-            matchKind = "local-controller"
-            company = nil
-        end
-
         if not matched then return end
-        matchLabel = company and tostring(company.name) or "(local player)"
 
         local money = Unwrap(moneyWrap) or 0
         if type(money) ~= "number" or money <= 0 then return end
@@ -360,8 +381,8 @@ local function BoostHandler(hookName)
         end)
         if setOk then
             Log(string.format(
-                "boost applied: %d -> %d (x%.2f) via=%s match=%s/%s",
-                money, boosted, CONFIG.Multiplier, hookName, matchKind, matchLabel))
+                "boost applied: %d -> %d (x%.2f) via=%s company=%s",
+                money, boosted, CONFIG.Multiplier, hookName, tostring(company.name)))
         else
             Log("param :set() failed on " .. hookName .. ": " .. tostring(setErr)
                 .. " (vanilla payout unchanged)")
@@ -397,17 +418,22 @@ local function SetupHook()
         end
     end
     if registered == 0 then
-        Log("WARNING: no hook targets registered. Boost will not fire.")
+        Log("WARNING: no AI-side hook targets registered on this build. "
+            .. "Boost will not fire. Use UE4SS Live View to find the AI "
+            .. "delivery profit-share function (search MTAIController / "
+            .. "MTCompanySystem / MotorTownGameMode for 'Profit', "
+            .. "'Reward', 'Delivery') and report the name so we can add "
+            .. "it to HOOK_TARGETS.")
     else
         Log(string.format("Hooks registered (%d): %s",
             registered, table.concat(registeredNames, ", ")))
-        Log("AI driver coverage: depends on which target fires for AI "
-            .. "deliveries on this MT build. If your AI drivers' deliveries "
-            .. "still aren't boosted, run UE4SS Live View, find the "
-            .. "function that handles AI delivery rewards (look for "
-            .. "'Profit', 'Reward', or 'Delivery' in MTAIController / "
-            .. "MTCompanySystem / MotorTownGameMode), and report the "
-            .. "exact name so we can add it to HOOK_TARGETS.")
+        Log("Player deliveries are NOT boosted by this mod (Economy "
+            .. "Editor handles those). Vehicles not owned by your "
+            .. "company are also untouched. If an AI delivery in YOUR "
+            .. "vehicle fires no 'boost applied' line in the log, "
+            .. "either none of the registered hooks is the right one "
+            .. "or MTCompany owner-GUID discovery failed (separate "
+            .. "warning above).")
     end
 end
 
@@ -452,31 +478,61 @@ def generate_main_lua(config: Dict[str, Any]) -> str:
 def generate_readme(config: Dict[str, Any]) -> str:
     val = _validate(config)
     if abs(val - 1.0) < 1e-6:
-        effect = "no change (mod is a no-op, hook not installed)"
+        effect = "no change (mod is a no-op, hooks not installed)"
     else:
         pct = val * 100.0
-        effect = f"deliveries in your own vehicles pay {pct:.0f}% of vanilla"
+        effect = f"AI driver deliveries in your company's vehicles pay {pct:.0f}% of vanilla"
     body = (
         f"Multiplier: x{val:.2f}  ({effect})\n\n"
+        "SCOPE\n"
+        "-----\n"
+        "AI-DRIVER deliveries only. Player deliveries are NOT touched\n"
+        "by this mod -- the Economy Editor's cargo-payment multiplier\n"
+        "handles those, and stacking the two would double-multiply.\n"
+        "Vehicles owned by AI companies, rentals, or other players are\n"
+        "also untouched -- the boost is scoped to YOUR company's vehicles\n"
+        "by matching the vehicle's Net_OwnerCompanyGuid against the list\n"
+        "of companies the local player owns.\n\n"
         "WHAT THIS MOD DOES\n"
         "------------------\n"
-        "Pre-hooks MotorTownPlayerController:ServerGiveOwnerProfitShare.\n"
-        "When it fires for a vehicle whose Net_OwnerCompanyGuid matches\n"
-        "a company the local player owns, the mod rewrites the Money\n"
-        "parameter to floor(Money * multiplier) BEFORE vanilla runs.\n"
-        "Vanilla then pays out the boosted amount as a single\n"
-        "transaction - the on-screen '+$X Owner's Profit Share' popup\n"
-        "and the company transaction ledger both reflect the real total.\n\n"
-        "Owner lookup walks MTCompanySystem.Server_Companies every 30s\n"
-        "and picks out the ones whose OwnerCharacterGuid matches the\n"
-        "local player's character GUID. Companies founded mid-session\n"
-        "start getting the boost within the next 30s.\n\n"
-        "Non-company vehicles (AI-company, rental, other players'\n"
-        "companies) are ignored entirely - the hook short-circuits\n"
-        "before touching the Money parameter.\n\n"
-        "If the UE4SS param :set() call fails for any reason (rare), a\n"
-        "warning is logged and the vanilla payment goes through\n"
-        "unchanged - no stuck state, no double-credit.\n\n"
+        "Pre-hooks the AI-side profit-share RPC. The exact function\n"
+        "name varies across MT builds, so the mod tries every plausible\n"
+        "candidate at startup (MotorTownAIController, MTAIController,\n"
+        "MTAICharacter, MTCompanySystem, MotorTownGameMode variants).\n"
+        "Whichever target is real on this build gets registered.\n\n"
+        "When the hook fires for an AI delivery in one of YOUR vehicles,\n"
+        "the mod rewrites the Money parameter to floor(Money * multiplier)\n"
+        "BEFORE vanilla runs. Vanilla then pays out the boosted amount\n"
+        "as a single transaction -- the company transaction ledger\n"
+        "reflects the real total, no second-line credit.\n\n"
+        "OWNER LOOKUP\n"
+        "------------\n"
+        "Walks MTCompanySystem.Server_Companies every 30s and picks out\n"
+        "the ones whose OwnerCharacterGuid (or FounderCharacterGuid)\n"
+        "matches the local player's character GUID. Companies founded\n"
+        "mid-session start getting the boost within the next 30s.\n\n"
+        "If MTCompany doesn't expose a recognised owner-GUID field on\n"
+        "this build, the mod logs a warning and stays idle (the boost\n"
+        "won't fire). Without owner identification we can't safely\n"
+        "scope the boost to YOUR company without falling back to the\n"
+        "old 'boost everyone's payouts' behaviour we were specifically\n"
+        "trying to avoid.\n\n"
+        "DIAGNOSING ISSUES\n"
+        "-----------------\n"
+        "Look at UE4SS.log for these lines from this mod:\n"
+        "  '=== Cryovac Company Profit Boost Loaded ==='\n"
+        "    -> mod loaded successfully.\n"
+        "  'Hooks registered (N): A, B, C'\n"
+        "    -> N hook targets registered. If N is 0, your build\n"
+        "       doesn't expose any of the candidates we tried; report\n"
+        "       which AI-side function MT actually calls.\n"
+        "  'Owned companies: NAME1, NAME2'\n"
+        "    -> owner discovery worked, mod knows what to scope to.\n"
+        "  'MTCompany owner-GUID field not exposed on this build'\n"
+        "    -> owner discovery failed; boost cannot fire on this\n"
+        "       build until the right field name is identified.\n"
+        "  'boost applied: X -> Y (x2.00) via=HookName company=Name'\n"
+        "    -> a delivery was just boosted.\n\n"
         "Runs server-side. On a dedicated server, install on the host.\n"
     )
     return render_install_readme(MOD_NAME, body)
