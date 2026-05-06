@@ -901,6 +901,7 @@ def apply_all_economy_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
             'ambulance': 'custom' if is_custom_amb else (amb_mult or 1.0),
             'fuel': 'custom' if is_custom_fuel else (fuel_mult or 1.0),
             'vehicle': 'custom' if is_custom_veh else (veh_mult or 1.0),
+            'profit_share': float(settings.get('profit_share_multiplier') or 1.0),
         },
     }
 

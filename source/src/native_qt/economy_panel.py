@@ -961,7 +961,7 @@ class EconomyEditorPanel(QtWidgets.QWidget):
                     return _t('Custom')
                 return f"\u00d7{v:.1f}"
 
-            self.status_label.setText(
+            applied_parts = [
                 _t("Applied: Economy {economy}, Bus {bus}, Taxi {taxi}, Amb {amb}, Fuel {fuel}, Veh {veh}").format(
                     economy=_fmt(mults['economy']),
                     bus=_fmt(mults['bus']),
@@ -970,7 +970,27 @@ class EconomyEditorPanel(QtWidgets.QWidget):
                     fuel=_fmt(mults['fuel']),
                     veh=_fmt(mults['vehicle'])
                 )
-            )
+            ]
+            # Surface free_buildings result so the user knows the patch
+            # actually landed in the mod tree. If it didn't, the next
+            # step (Pack Mod) won't include the modified DataTable.
+            fb = result.get('details', {}).get('free_buildings')
+            if isinstance(fb, dict) and fb.get('success'):
+                applied_parts.append(
+                    _t("Free buildings: {arrays} array(s), {qty} cargo entries zeroed").format(
+                        arrays=fb.get('arrays_touched', 0),
+                        qty=fb.get('quantities_zeroed', 0),
+                    )
+                )
+            elif isinstance(fb, str) and fb.startswith('error'):
+                applied_parts.append(_t("Free buildings: ⚠ {msg}").format(msg=fb))
+            # Profit-share echo
+            ps = result.get('details', {}).get('profit_share')
+            if isinstance(ps, dict) and ps.get('success'):
+                pm = mults.get('profit_share') if isinstance(mults, dict) else None
+                if pm:
+                    applied_parts.append(_t("Owner profit share: ×{m:.2f}").format(m=pm))
+            self.status_label.setText("  •  ".join(applied_parts))
             self.status_label.setStyleSheet(f"color: {_SUCCESS}; font-size: 12px; font-weight: 600;")
             self.economy_applied.emit(result)
         else:
