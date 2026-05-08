@@ -1,484 +1,329 @@
-"""Cryovac Free Depot Construction — runtime force-complete approach.
+"""Cryovac Free Depot Construction — mod-pak based (v8, 2026-05-08).
 
-Earlier versions tried to modify the Buildings_Houses DataTable to
-zero (or near-zero) the construction-cost arrays. That ran into two
-unsolvable problems:
+Replaces the v7.x runtime Lua force-complete approach with a clean
+mod-pak that ships a modified Buildings_Houses.uexp/.uasset. Both
+Depot_01 and Depot_02 are reduced to a single-Sand-cargo construction
+requirement; the architect blueprint price is unchanged.
 
-  1. With requirements at 0, MT's construction state machine never
-     fires its completion event (no delivery → no event → stuck).
-  2. With requirements at 1 unit per cargo, the player still has to
-     produce one of every cargo type — and several of those (Plastic
-     Pipes, H-Beam, Concrete) require multi-step production chains.
-     That defeats the purpose of "free construction".
+History
+-------
+v7.2.x  .pak modification of Buildings DT — earlier test concluded
+        "doesn't work" but the test was buggy. We've since proven
+        .uexp overrides via mod-pak DO take effect on this game.
+v7.3-v7.32 Runtime Lua force-complete chain — the long iteration
+        through the UE4SS Lua minefield (FName-from-string crashes,
+        TArray:Add no-ops, freeze-on-spawn, BeginPlay overlap crashes,
+        rotation arg order, etc). Eventually got an in-session
+        working depot but the runtime spawn doesn't persist across
+        save+reload because the engine's natural completion code
+        never runs.
+v7.33   Final runtime-Lua state — fully working in-session, no
+        persistence. Retired in favor of v8.
+v8 (this file): direct mod-pak modification of Buildings_Houses.uexp.
+        Each depot row's Materials TMap is shrunk from 5 entries to
+        1 entry (Sand=1). Player drops one Sand cargo, the engine's
+        natural completion code fires end-to-end including save
+        persistence. Confirmed working in-game with reload survival.
 
-The right angle is to leave the DataTable vanilla and modify the
-*placed construction site actor* at runtime. The construction screen
-still shows the normal materials list, but the actor's internal
-"completion" check fires immediately because the mod sets its
-delivered-amount fields equal to its required-amount fields (or
-calls a Complete method directly) the moment it's placed.
+Mechanism
+---------
+The Materials TMap binary layout in the .uexp:
+    [int32 count]
+    count × [int32 name_idx, int32 name_inst, int32 value]
 
-Approach
---------
-Periodically scans for placed construction-site actors via FindAllOf
-and tries a list of candidate methods/fields to advance them to the
-"completed" state. The candidate list covers every reasonable UE5
-naming convention for delivery completion / construction finish on
-MT's likely class hierarchy:
+Vanilla Depot_02 has 5 entries: Concrete=15, Sand=15,
+WoodPlank_14ft_5t=4, lHBeam_6m=3, PlasticPipes_6m=3.
 
-  - call <Site>:CompleteConstruction()      (most likely method name)
-  - call <Site>:ServerCompleteConstruction() (server-side variant)
-  - call <Site>:OnAllMaterialsDelivered()   (event-style)
-  - call <Site>:FinishConstruction()        (alternative)
-  - copy RequiredAmounts → DeliveredAmounts (state-copy fallback)
-  - set bIsCompleted/bIsConstructed = true  (flag fallback)
+We shrink to 1 entry: Sand=1. The .uasset's Export[0].SerialSize is
+also updated to match the new (shorter) .uexp.
 
-UE4SS's pcall-wrapped property/method access fails silently for
-non-existent names, so listing every plausible candidate is safe —
-the wrong ones drop out, the right one fires and the construction
-site finishes. The mod logs which method actually worked at the
-first successful completion, so future debugging knows which combo
-was the live one on the user's MT build.
+Why "Sand=1" specifically: of the five vanilla materials, only Sand
+is trivial to acquire (single-step production at any Sand pickup).
+The other four require multi-step production chains that defeat the
+"free construction" goal. The engine completion check is gated on
+DeliveredMaterials.length() matching Steps[currentStep].Materials.length(),
+so requiring just Sand=1 lets the natural completion fire after a
+single delivery instead of needing all five materials.
 
-If NONE of the candidates work, the mod logs a clear "no candidate
-matched" message at startup with instructions for the user to
-report the actual class/method names from UE4SS Live View so the
-candidate list can be extended.
+Output
+------
+deploy() generates ZZZ_FrogModFreeDepots_P.pak and places it in the
+user's configured pak_output_dir (File > Customize > Pak output folder).
+The user drops the pak into <Motor Town>/Content/Paks/.
+
+A tiny no-op Lua stub is also written to the lua_output_dir for
+backward compat with the existing UE4SS-Mods workflow — the stub
+just logs that the real work is done by the pak.
 """
 from __future__ import annotations
 
-from typing import Any, Dict
+import os
+from typing import Any, Dict, List
 
-from . import register, DEFAULT_OUTPUT_DIR
-from ._shared import render_install_readme, write_mod_folder
+from . import register, DEFAULT_OUTPUT_DIR, Setting, ModeOption
+from ._shared import write_mod_folder
 
 
 MOD_NAME = 'CryovacFreeDepotConstruction'
-
 UI_TITLE = 'Free Depot Construction'
 
 UI_DESCRIPTION = (
-    "Force-completes Depot and Large Garage construction sites the "
-    "moment they're placed. The construction screen still shows the "
-    "normal materials list, but the building skips the delivery "
-    "requirement entirely — no cargo runs needed.\n\n"
-    "Mechanism: at runtime, the mod periodically scans for placed "
-    "construction-site actors (Depot_01_Construction, Depot_02_Construction, "
-    "LargeGarage_01_Construction, etc.) and forces their state to "
-    "'completed' by trying common UE5 completion-method names "
-    "(<code>CompleteConstruction</code>, <code>ServerCompleteConstruction</code>, "
-    "<code>OnAllMaterialsDelivered</code>, etc.). Whichever name MT "
-    "actually uses on the current build wins.\n\n"
-    "<b>This mod has no settings.</b> Deploy to enable; remove the "
-    "folder or set <code>enabled.txt: 0</code> to disable. Houses, "
-    "furniture, and other building types are untouched.\n\n"
-    "Replaces the v7.2.x DataTable-modification approach, which "
-    "couldn't trigger the vanilla completion flow without forcing "
-    "the player to produce one of every multi-step cargo type."
+    "<b>Reduces both depot construction sites to require only ONE Sand "
+    "cargo delivery.</b> The architect blueprint price is unchanged — "
+    "only the on-site delivery requirements drop.\n\n"
+
+    "<b>How it works (v8, 2026-05-08):</b> ships a modified "
+    "<code>Buildings_Houses.uexp</code> inside a mod-pak. Each depot "
+    "row's Materials TMap is shrunk from 5 entries to 1 (Sand=1). When "
+    "the player drops a single Sand cargo at the construction site, the "
+    "game's <i>natural</i> completion code runs end-to-end — including "
+    "save persistence. The depot persists across reload exactly like a "
+    "depot that completed via the vanilla 39-cargo flow.\n\n"
+
+    "<b>Why this is better than the previous v7.x runtime Lua mod:</b> "
+    "the v7.x mod force-completed construction by manually applying state "
+    "writes from Lua, which worked in-session but did not persist on "
+    "reload. v8's natural-completion path is recorded by the engine's "
+    "own save logic, so reload restores the operational depot correctly.\n\n"
+
+    "<b>Output:</b> a pak file is written to your configured "
+    "<i>Pak output folder</i> (File &gt; Customize). Default name: "
+    "<code>ZZZ_FrogModFreeDepots_P.pak</code>. Drop it in "
+    "<code>&lt;Motor Town&gt;/Content/Paks/</code> and launch the game.\n\n"
+
+    "<b>Garages:</b> in vanilla, garages already build instantly (no "
+    "construction-cost requirements). No mod is needed for them."
 )
 
-# No user-configurable settings. The framework requires DEFAULT_CONFIG
-# and SETTINGS to exist on every deployer; both are empty here.
-DEFAULT_CONFIG: Dict[str, Any] = {}
-SETTINGS = []  # type: ignore[var-annotated]
+
+# Settings: just one — should the pak overwrite an existing file in the
+# configured output dir without prompting? Most users want this; an
+# explicit toggle gives the careful user a check.
+SETTINGS: List[Setting] = [
+    Setting(
+        key='overwrite_existing',
+        label='Overwrite existing pak file',
+        kind='bool',
+        default=True,
+        tooltip=(
+            'If a ZZZ_FrogModFreeDepots_P.pak already exists in your '
+            'Pak output folder, replace it. Untick to abort the deploy '
+            'instead of overwriting.'
+        ),
+    ),
+]
+
+DEFAULT_CONFIG: Dict[str, Any] = {
+    'overwrite_existing': True,
+}
 
 
-_MAIN_LUA_TEMPLATE = '''--[[
-    Cryovac: Free Depot Construction (runtime force-complete)
-    =========================================================
-    Skips the delivery phase on Depot / Large Garage construction
-    sites. Player places one, the mod sees it on the next scan, and
-    forces it to the "completed" state via whichever of several
-    candidate completion methods the current MT build exposes.
-
-    Generated by Frog Mod Editor. No settings. Server-side mod;
-    runs on host or dedicated. Requires UE4SS.
-]]--
-
-local CONFIG = {{
-    InitialDelayMs = 8000,           -- wait for world load
-    ScanIntervalMs = 3000,           -- how often we look for new sites
-}}
-
-local function Log(msg) print("[CryovacFreeDepotConstruction] " .. msg) end
-
-local function SafeGet(obj, prop)
-    local ok, val = pcall(function() return obj[prop] end)
-    if ok then return val end
-    return nil
-end
-
--- Class names to look for via FindAllOf. Specific blueprint
--- subclasses come first; base-class candidates catch renamed variants.
-local CLASS_CANDIDATES = {{
-    "Depot_01_Construction_C",
-    "Depot_02_Construction_C",
-    "LargeGarage_01_Construction_C",
-    "Garage_01_Construction_C",
-    "MTBuildingConstruction_C",
-    "MTBuildingConstruction",
-    "MTConstructionSite",
-    "BP_BuildingConstruction_Base_C",
-}}
-
--- Methods we'll try calling (in order) to force completion.
--- An empty paren `(actor)` arg list = method with implicit self.
--- Order: most specific names first, then progressively more
--- generic. We also include UE5 BP-event K2_ prefix variants and
--- the OnRep_ replication-callback names that fire state-change
--- handlers when a replicated bool flips.
-local COMPLETE_METHOD_CANDIDATES = {{
-    -- Specific completion functions
-    "CompleteConstruction", "ServerCompleteConstruction",
-    "OnAllMaterialsDelivered", "OnConstructionCompleted",
-    "FinishConstruction", "ServerFinishConstruction",
-    "Server_FinishConstruction", "Server_CompleteConstruction",
-    "Server_OnConstructionFinished", "Server_FinishBuild",
-    "Server_OnAllMaterialsDelivered", "Server_OnStepCompleted",
-    -- Step / phase advancement
-    "AdvanceStep", "AdvanceConstructionStep", "NextStep",
-    "OnStepCompleted", "ProgressToNextStep",
-    "Server_AdvanceStep", "Server_NextStep",
-    -- Build / construct verbs
-    "Build", "BuildComplete", "OnBuildComplete",
-    "FinishBuild", "OnFinishBuild", "K2_OnBuildComplete",
-    -- BP event variants (UE5 BlueprintImplementableEvents
-    -- typically expose with a K2_ prefix from C++)
-    "K2_CompleteConstruction", "K2_FinishConstruction",
-    "K2_OnConstructionCompleted",
-    -- OnRep replication callbacks (fires state-change handlers
-    -- AFTER the corresponding flag is set)
-    "OnRep_bIsCompleted", "OnRep_bIsConstructed",
-    "OnRep_IsCompleted", "OnRep_Completed",
-    "OnRep_ConstructionState", "OnRep_State",
-    -- Spawn-finished-building helpers
-    "SpawnFinishedBuilding", "SpawnCompletedActor",
-    "ServerSpawnFinishedBuilding", "Server_SpawnCompletedActor",
-    -- Generic verbs as a last-ditch
-    "Complete", "Finish", "Trigger", "Execute",
-}}
-
--- Boolean flags we'll try setting to true to mark completed.
-local COMPLETED_FLAG_CANDIDATES = {{
-    "bIsCompleted", "bIsConstructed",
-    "bConstructionFinished", "bConstructionComplete",
-    "bIsBuilt", "bFinished", "bComplete",
-    "bAllMaterialsDelivered", "bIsFinishedConstruction",
-}}
-
--- Numeric "current step" / "progress" fields. We push these to
--- a high value so any step-comparison logic skips ahead.
-local STEP_FIELD_CANDIDATES = {{
-    "CurrentStep", "CurrentStepIndex", "StepIndex",
-    "CurrentPhase", "PhaseIndex", "ConstructionStep",
-}}
-
--- Numeric "time remaining" fields we push to 0 to skip timed waits.
-local TIMER_FIELD_CANDIDATES = {{
-    "RemainingTime", "RemainingBuildTime", "BuildTimeLeft",
-    "ConstructionTimeRemaining", "TimeToComplete",
-}}
-
--- "Delivered amount" array/map field candidates. We try to populate
--- these to high values so any "delivered >= required" check trips.
--- Strategy: set the whole field to a TArray of high integers, OR
--- iterate and set each element. UE4SS exposes both array and map
--- operations but the API surface varies.
-local DELIVERED_FIELD_CANDIDATES = {{
-    "DeliveredAmount", "DeliveredAmounts",
-    "DeliveredMaterials", "DeliveredCargos",
-    "DeliveredItems", "CurrentDeliveries",
-    "Deliveries", "DeliveryCounts",
-    "MaterialsDelivered", "CargosDelivered",
-    "MaterialProgress", "DeliveryProgress",
-}}
-
--- Total / required side, in case the construction logic compares
--- delivered >= required and we need to lower required to 0 instead
--- (or read it to know what to stuff into delivered).
-local REQUIRED_FIELD_CANDIDATES = {{
-    "RequiredAmount", "RequiredAmounts",
-    "RequiredMaterials", "RequiredCargos",
-    "RequiredItems", "MaterialsRequired",
-    "TotalRequired", "RequiredDeliveries",
-}}
-
--- Track which actors we've already completed so we don't redo them.
-local completedActors = {{}}
-
--- The first method that successfully fires gets cached so we don't
--- waste pcalls on the others on every subsequent site.
-local cachedMethod = nil
-local cachedFlag = nil
-
-local function GetActorKey(actor)
-    local key = ""
-    pcall(function() key = actor:GetFullName() end)
-    return key
-end
-
--- Try to populate a "delivered amounts" array on the actor with high
--- values, so any "delivered >= required" check trips. Returns the
--- field name we wrote to, or nil if no candidate matched.
-local function StuffDeliveredArray(actor)
-    for _, fname in ipairs(DELIVERED_FIELD_CANDIDATES) do
-        local field = SafeGet(actor, fname)
-        if field then
-            -- Try as array: set each element to 9999
-            local count = 0
-            pcall(function() count = #field end)
-            if count > 0 then
-                local touched = 0
-                for i = 1, count do
-                    local ok = pcall(function() field[i] = 9999 end)
-                    if ok then touched = touched + 1 end
-                end
-                if touched > 0 then
-                    return fname .. "[" .. touched .. "]"
-                end
-            end
-            -- Try as TMap: ForEach + write each value
-            local touched_map = 0
-            pcall(function()
-                field:ForEach(function(k, _v)
-                    local ok = pcall(function() field[k] = 9999 end)
-                    if ok then touched_map = touched_map + 1 end
-                end)
-            end)
-            if touched_map > 0 then
-                return fname .. "(map=" .. touched_map .. ")"
-            end
-        end
-    end
-    return nil
-end
-
--- Lower required-amount arrays to 0 (alternate angle: instead of
--- topping up delivered, drop required to nothing).
-local function ZeroRequiredArray(actor)
-    for _, fname in ipairs(REQUIRED_FIELD_CANDIDATES) do
-        local field = SafeGet(actor, fname)
-        if field then
-            local count = 0
-            pcall(function() count = #field end)
-            if count > 0 then
-                local touched = 0
-                for i = 1, count do
-                    local ok = pcall(function() field[i] = 0 end)
-                    if ok then touched = touched + 1 end
-                end
-                if touched > 0 then
-                    return fname .. "[" .. touched .. "]=0"
-                end
-            end
-            local touched_map = 0
-            pcall(function()
-                field:ForEach(function(k, _v)
-                    local ok = pcall(function() field[k] = 0 end)
-                    if ok then touched_map = touched_map + 1 end
-                end)
-            end)
-            if touched_map > 0 then
-                return fname .. "(map=" .. touched_map .. ")=0"
-            end
-        end
-    end
-    return nil
-end
-
--- Aggressive multi-strategy completion attempt. Tries everything in
--- sequence; returns the list of strategies that ran without error.
--- We don't stop at the first success because the construction actor
--- typically needs MULTIPLE state changes to fully transition (flag
--- + step + method), and setting flags alone isn't enough on its own.
-local function TryComplete(actor)
-    local applied = {{}}
-
-    -- 1. Stuff the delivered-amounts array first so any subsequent
-    --    method call observes "all materials delivered".
-    local stuffed = StuffDeliveredArray(actor)
-    if stuffed then applied[#applied + 1] = "delivered:" .. stuffed end
-
-    -- 2. Lower required-amounts to 0 from the other side.
-    local zeroed = ZeroRequiredArray(actor)
-    if zeroed then applied[#applied + 1] = "required:" .. zeroed end
-
-    -- 3. Set every plausible "completed" boolean flag
-    for _, f in ipairs(COMPLETED_FLAG_CANDIDATES) do
-        local ok = pcall(function() actor[f] = true end)
-        if ok then applied[#applied + 1] = "flag:" .. f end
-    end
-
-    -- 4. Push every step counter to 9999 so step-comparison logic
-    --    (current >= total) trivially passes
-    for _, f in ipairs(STEP_FIELD_CANDIDATES) do
-        local ok = pcall(function() actor[f] = 9999 end)
-        if ok then applied[#applied + 1] = "step:" .. f end
-    end
-
-    -- 5. Zero every plausible timer field
-    for _, f in ipairs(TIMER_FIELD_CANDIDATES) do
-        local ok = pcall(function() actor[f] = 0 end)
-        if ok then applied[#applied + 1] = "timer:" .. f end
-    end
-
-    -- 6. Try every candidate completion method/RPC. The order
-    --    matters somewhat — flag-set above lets OnRep_ callbacks
-    --    see the flipped value when fired here.
-    if cachedMethod then
-        local ok = pcall(function() actor[cachedMethod](actor) end)
-        if ok then applied[#applied + 1] = "method:" .. cachedMethod end
-    end
-    for _, m in ipairs(COMPLETE_METHOD_CANDIDATES) do
-        if m ~= cachedMethod then
-            local ok = pcall(function() actor[m](actor) end)
-            if ok then
-                cachedMethod = cachedMethod or m
-                applied[#applied + 1] = "method:" .. m
-            end
-        end
-    end
-
-    return applied
-end
-
-local successCount = 0
-local failureLogged = false
-
-local function ScanAndComplete()
-    for _, class_name in ipairs(CLASS_CANDIDATES) do
-        local actors = FindAllOf(class_name)
-        if actors then
-            local count = 0
-            pcall(function() count = #actors end)
-            for i = 1, count do
-                local actor = actors[i]
-                local key = GetActorKey(actor)
-                if key ~= "" and not completedActors[key] then
-                    local applied = TryComplete(actor)
-                    if applied and #applied > 0 then
-                        -- Don't permanently dedupe — we want subsequent
-                        -- scans to keep poking at sites that didn't
-                        -- actually complete (state machine may need
-                        -- multiple ticks of state pressure).
-                        -- But log once per site so the log doesn't
-                        -- flood every 3 seconds.
-                        if not completedActors[key] then
-                            Log(string.format(
-                                "Pressing %s (class %s) with %d strategies: %s",
-                                key, class_name, #applied,
-                                table.concat(applied, ", ")))
-                            completedActors[key] = true
-                            successCount = successCount + 1
-                        end
-                    elseif not failureLogged then
-                        failureLogged = true
-                        Log(string.format(
-                            "Found construction site %s (class %s) but "
-                            .. "NO field, flag, or method on this build "
-                            .. "matched our candidate lists. Use UE4SS "
-                            .. "Live View on this actor and report the "
-                            .. "exposed methods + properties so the "
-                            .. "candidate list can be extended.",
-                            key, class_name))
-                    end
-                end
-            end
-        end
-    end
-end
-
--- Init
-Log("=== Cryovac Free Depot Construction Loading ===")
-
-ExecuteWithDelay(CONFIG.InitialDelayMs, function()
-    ScanAndComplete()
-end)
-
-LoopAsync(CONFIG.ScanIntervalMs, function()
-    ScanAndComplete()
-    return false  -- keep looping forever
-end)
-
-Log("=== Cryovac Free Depot Construction Loaded ===")
-'''
+# Output filename. Keeps the ZZZ_ prefix (loads after Cryovac's
+# ZZZ_FrogMod_P.pak alphabetically, so any DT conflict resolves to
+# our depot mod) and the _P.pak suffix UE's pak loader looks for.
+_DEFAULT_PAK_NAME = 'ZZZ_FrogModFreeDepots_P.pak'
 
 
 def generate_main_lua(config: Dict[str, Any]) -> str:
-    # The template uses {{ and }} as Python str.format escapes for
-    # literal Lua braces, so we MUST run it through .format() even
-    # though there are no substitutions — otherwise the rendered
-    # Lua contains stray double-braces which corrupt the parser
-    # and make every API call (ExecuteWithDelay, LoopAsync, ...)
-    # look malformed at runtime.
-    return _MAIN_LUA_TEMPLATE.format()
+    """No-op Lua stub. The actual mod runs entirely from the pak's
+    Buildings_Houses modifications — UE4SS Lua isn't involved at all
+    in v8. We still emit a tiny stub so the UE4SS Mods folder layout
+    looks normal and any leftover mods.txt entries don't break."""
+    return (
+        '-- Cryovac Free Depot Construction (v8, mod-pak based)\n'
+        '--\n'
+        '-- This Lua file is intentionally a no-op. The actual mod runs\n'
+        '-- from a mod-pak that modifies Buildings_Houses.uexp directly.\n'
+        '-- Look for ZZZ_FrogModFreeDepots_P.pak in your configured Pak\n'
+        '-- output folder, and drop it in <Motor Town>/Content/Paks/.\n'
+        '\n'
+        'print("[CryovacFreeDepotConstruction] v8 stub loaded — '
+        'real work is done by ZZZ_FrogModFreeDepots_P.pak")\n'
+    )
 
 
 def generate_readme(config: Dict[str, Any]) -> str:
     body = (
-        "Force-completes Depot and Large Garage construction sites at\n"
-        "runtime. Player places a Depot_01 / Depot_02 / LargeGarage_01\n"
-        "construction site, and within ~3 seconds the mod detects it\n"
-        "and forces it to the 'completed' state.\n\n"
+        "Reduces depot construction (Depot_01 and Depot_02) to a single\n"
+        "Sand cargo delivery. The architect blueprint cost is unchanged.\n\n"
+
+        "OUTPUT FILE\n"
+        "-----------\n"
+        "  ZZZ_FrogModFreeDepots_P.pak\n\n"
+        "Generated in your configured Pak output folder (File > Customize).\n"
+        "Drop the pak into <Motor Town>/Content/Paks/.\n\n"
+
         "WHAT THIS MOD DOES\n"
         "------------------\n"
-        "1. Every 3 seconds, scans for construction-site actors via\n"
-        "   FindAllOf using a list of likely class names\n"
-        "   (Depot_01_Construction_C, Garage_01_Construction_C,\n"
-        "   MTBuildingConstruction, etc.).\n"
-        "2. For each newly-found site, tries a list of likely\n"
-        "   completion methods (CompleteConstruction,\n"
-        "   ServerCompleteConstruction, OnAllMaterialsDelivered, ...).\n"
-        "3. The first method that fires without error gets cached;\n"
-        "   subsequent sites use it directly with no further probing.\n"
-        "4. If no method works, falls back to setting boolean flags\n"
-        "   (bIsCompleted, bIsConstructed, ...).\n"
-        "5. Each completed site is tracked so the mod doesn't redo it.\n\n"
-        "DIAGNOSING ISSUES\n"
-        "-----------------\n"
-        "Check UE4SS.log for these lines from this mod:\n"
-        "  '=== Cryovac Free Depot Construction Loaded ==='\n"
-        "    -> mod loaded successfully.\n"
-        "  'Discovered working completion method: <name>'\n"
-        "    -> the mod found a working completion method on this build.\n"
-        "  'Completed construction site <path> via <name> (class <C>)'\n"
-        "    -> a site was just force-completed.\n"
-        "  'Found construction site ... but no candidate ... worked'\n"
-        "    -> none of the candidate methods fired. Use UE4SS Live View\n"
-        "       to inspect the construction-site actor and report the\n"
-        "       actual method/field name on this build.\n\n"
-        "WHY THIS REPLACES THE v7.2.x APPROACH\n"
-        "-------------------------------------\n"
-        "v7.2.0 - v7.2.3 tried to modify Buildings_Houses.uexp to\n"
-        "zero or reduce construction costs. That had two failure modes:\n"
-        "  (a) all-zero requirements never trigger the vanilla\n"
-        "      completion event (no delivery -> no event -> stuck);\n"
-        "  (b) leaving 1 unit per cargo still requires the player to\n"
-        "      produce multi-step cargoes (Plastic Pipes, H-Beam),\n"
-        "      defeating the 'free construction' goal.\n"
-        "Force-completing the actor at runtime sidesteps both.\n\n"
-        "NO SETTINGS\n"
+        "Modifies Buildings_Houses.uexp inside the mod-pak so that each\n"
+        "depot row's Materials TMap has only one entry: Sand=1.\n\n"
+        "  Depot_01 vanilla: Concrete=10, Sand=10, WoodPlank=2,\n"
+        "                    H-Beam=2, Plastic Pipes=2  (5 materials)\n"
+        "  Depot_01 modded:  Sand=1                       (1 material)\n\n"
+        "  Depot_02 vanilla: Concrete=15, Sand=15, WoodPlank=4,\n"
+        "                    H-Beam=3, Plastic Pipes=3  (5 materials)\n"
+        "  Depot_02 modded:  Sand=1                       (1 material)\n\n"
+
+        "WHY ONLY SAND\n"
+        "-------------\n"
+        "Of the five vanilla depot materials, only Sand is trivial to\n"
+        "acquire. The other four (Concrete, WoodPlank_14ft_5t, lHBeam_6m,\n"
+        "PlasticPipes_6m) all involve multi-step production chains that\n"
+        "would defeat the 'free construction' goal.\n\n"
+        "The Materials TMap is shrunk to a single key (Sand) rather than\n"
+        "left with 4 zero-required keys, because the engine's completion\n"
+        "check is gated on DeliveredMaterials.length() matching Materials\n"
+        ".length(). With 5 keys but only Sand delivered, the lengths\n"
+        "don't match and the construction never completes (we tested\n"
+        "this — see v3 of the test pak in the project history). Shrinking\n"
+        "the TMap lets the natural completion fire after a single delivery.\n\n"
+
+        "PERSISTENCE\n"
         "-----------\n"
-        "Binary toggle. Deploy to enable; remove the folder or set\n"
-        "the line in mods.txt to '0' to disable.\n\n"
+        "Once Sand is delivered, the engine's natural construction\n"
+        "completion code runs — including the save state update. The\n"
+        "operational depot persists across save+reload exactly as if it\n"
+        "had been built via the vanilla 39-cargo flow.\n\n"
+
+        "GARAGES\n"
+        "-------\n"
+        "Garages (Garage_01 / LargeGarage_01) already build instantly\n"
+        "in vanilla — they have no construction-cost materials. No mod\n"
+        "needed for them.\n\n"
+
+        "INSTALLATION\n"
+        "------------\n"
+        "1. The editor produces ZZZ_FrogModFreeDepots_P.pak.\n"
+        "2. Copy it to your Motor Town install:\n"
+        "     <Motor Town install>\\MotorTown\\Content\\Paks\\\n"
+        "3. Launch the game. Visit the architect, buy a Depot blueprint,\n"
+        "   place it on a vacant lot. Construction screen now shows only\n"
+        "   Sand 0/1.\n"
+        "4. Drop one Sand cargo at the construction site. Construction\n"
+        "   completes; the operational depot spawns.\n\n"
+
+        "UNINSTALLING\n"
+        "------------\n"
+        "Delete ZZZ_FrogModFreeDepots_P.pak from <Motor Town>/Content/Paks/.\n"
+        "The depots will revert to their vanilla 5-material requirements.\n"
+        "Existing depots that were already constructed remain operational.\n\n"
+
         "MULTIPLAYER\n"
         "-----------\n"
-        "Server-side mod. Install on the host / dedicated server only.\n"
-        "Clients see the completed building because the construction\n"
-        "state replicates from the server.\n"
+        "The pak modifies a server-authoritative DataTable. Install on\n"
+        "the host or dedicated server. Other players don't need the pak\n"
+        "(it's read by whichever side authored the construction events).\n"
     )
-    return render_install_readme(MOD_NAME, body)
+    # render_install_readme expects a specific structure — but we want a
+    # custom format here since this isn't a Lua mod. Inline the basic
+    # README format.
+    return (
+        f'{MOD_NAME}\n'
+        f'{"=" * len(MOD_NAME)}\n\n'
+        f'{body}\n'
+    )
+
+
+def _resolve_pak_output_dir() -> str:
+    """Look up the user's configured Pak output folder. Falls back to
+    DEFAULT_OUTPUT_DIR if not set or missing.
+
+    The user sets this via File > Customize > Pak output folder.
+    """
+    try:
+        from customize_settings import load as _load_cs
+        cfg = _load_cs()
+        pak_dir = (cfg.get('pak_output_dir') or '').strip()
+        if pak_dir and os.path.isdir(pak_dir):
+            return pak_dir
+    except Exception:
+        pass
+    # Fallback to the editor's default paks dir (one level above
+    # lua_mod_output, alongside the workspace's other generated paks).
+    src_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    proj_root = os.path.dirname(src_root)
+    return os.path.join(proj_root, 'data', 'default_paks')
 
 
 def deploy(config: Dict[str, Any], output_dir: str = None) -> Dict[str, Any]:
+    """Deploy the Free Depot Construction mod-pak.
+
+    output_dir is the LUA mod folder (where we drop a no-op stub for
+    backward compat). The actual pak goes to the user's configured
+    pak_output_dir.
+
+    Returns:
+      {success, lua_path?, pak_path?, pak_size?, message?, error?}
+    """
     out_dir = output_dir or DEFAULT_OUTPUT_DIR
-    return write_mod_folder(
+
+    # 1. Write the no-op Lua mod folder (so the LUA Scripts panel still
+    # has something to point at). Doesn't affect gameplay.
+    lua_result = write_mod_folder(
         mod_name=MOD_NAME,
         output_dir=out_dir,
         main_lua=generate_main_lua(config),
         readme=generate_readme(config),
-        mod_info={'binary_toggle': True, 'strategy': 'runtime_force_complete'},
+        mod_info={
+            'strategy': 'mod_pak_buildings_houses_shrink',
+            'pak_filename': _DEFAULT_PAK_NAME,
+            'targets': ['Depot_01', 'Depot_02'],
+            'replaces_runtime_lua_v7': True,
+        },
     )
+    if not lua_result.get('success'):
+        return {
+            'success': False,
+            'error': f'Lua stub deploy failed: {lua_result.get("error")}'
+        }
+
+    # 2. Generate the pak in the user's configured pak_output_dir.
+    pak_dir = _resolve_pak_output_dir()
+    os.makedirs(pak_dir, exist_ok=True)
+    pak_path = os.path.join(pak_dir, _DEFAULT_PAK_NAME)
+
+    # Honor the overwrite_existing setting
+    if os.path.exists(pak_path) and not config.get('overwrite_existing', True):
+        return {
+            'success': False,
+            'lua_path': lua_result.get('path'),
+            'error': (
+                f'Pak file already exists at {pak_path}. Tick '
+                f'"Overwrite existing pak file" or remove the existing '
+                f'file manually.'
+            ),
+        }
+
+    # Lazy import to keep this file's imports light; parsers package
+    # has its own sys.path setup.
+    import sys as _sys
+    parser_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if parser_dir not in _sys.path:
+        _sys.path.insert(0, parser_dir)
+    from parsers.uexp_buildings_dt import generate_free_depots_pak
+
+    pak_result = generate_free_depots_pak(pak_path)
+    if not pak_result.get('success'):
+        return {
+            'success': False,
+            'lua_path': lua_result.get('path'),
+            'error': f'Pak generation failed: {pak_result.get("error")}',
+        }
+
+    return {
+        'success': True,
+        'lua_path': lua_result.get('path'),
+        'pak_path': pak_result['pak_path'],
+        'pak_size': pak_result['pak_size'],
+        'targets_modified': pak_result.get('targets_modified', []),
+        'bytes_removed': pak_result.get('bytes_removed', 0),
+        'message': (
+            f'Generated {os.path.basename(pak_result["pak_path"])} '
+            f'({pak_result["pak_size"]} bytes). Copy it to '
+            f'<Motor Town>/Content/Paks/ to install.'
+        ),
+    }
 
 
 import sys as _sys

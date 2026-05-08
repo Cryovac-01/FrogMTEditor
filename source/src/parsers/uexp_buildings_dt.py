@@ -1,49 +1,52 @@
 """Buildings DataTable construction-cost modifier.
 
-Targets Motor Town's Buildings DataTables (e.g. Buildings_Houses.uexp).
-The .uexp file contains row blocks for every building (depots, garages,
-houses, parking spaces); each row that has a construction cost embeds
-a cargo-requirement array somewhere inside its block.
+Targets Motor Town's Buildings DataTables (Buildings_Houses.uexp). The
+.uexp file contains row blocks for every building. Depot rows embed a
+Materials TMap<FName, int32> with the construction-cost requirements.
 
-Cargo array binary layout (verified by reverse-engineering vanilla
-Buildings_Houses.uexp against the in-game Construction screen for
-Depot_01 — quantities 15, 15, 4, 3, 3 matched exactly):
+Materials TMap binary layout (CORRECTED 2026-05-08; the original
+parser interpretation in this file was wrong):
 
-    [int32 count]              array length
-    [int32 zero_pad]           always 0
-    [int32 zero_pad]           always 0
+    [int32 count]
     count × {
-        int32 quantity         the cargo amount required
-        int32 name_idx         FName index into the .uasset name table
-        int32 name_inst        FName instance, always 0 here
+        int32 name_idx     // FName index in the .uasset name table
+        int32 name_inst    // FName instance number (always 0 here)
+        int32 value        // the required quantity
     }
 
-The structure is unambiguous enough that we can find the cargo arrays
-without resolving FNames against the .uasset name table — we just
-pattern-match on the layout (count + two zero pads + N entries where
-each entry has a small positive quantity, a non-negative name index,
-and a zero instance).
+There are no zero pads after the count — the original parser's
+"zero pad" detection happened to match because Concrete (the typical
+first material) has name_idx=0 in vanilla, so [name_idx=0,
+name_inst=0] looked like "two zero pads" to the old scanner. The
+old scanner's "qty" writes coincidentally landed on the actual value
+bytes by 8-byte alignment, so its bulk modifications worked — but its
+diagnostic outputs (which materials, in what order) were wrong.
 
-Zeroing every quantity yields a "free construction" mod: the building
-still has the same step structure and the construction site still
-appears in-game, but every required cargo amount drops to 0, so the
-build completes the moment the player places the construction site
-without any deliveries.
+Working "free depot construction" approach (verified in-game v5+):
+shrink the depot row's Materials TMap from 5 entries to 1 entry
+(Sand=1). Player drops a single Sand cargo at the construction site,
+the natural completion event fires (because TMap.length matches
+DeliveredMaterials.length), construction completes end-to-end
+including save persistence — no runtime Lua needed.
 
-Why this approach instead of UE4SS-Lua reflection: Motor Town's row
-struct field names aren't exposed via reflection on current builds,
-which made the runtime-Lua mod (CryovacFreeDepotConstruction) unable
-to locate the cargo collection. The .uexp byte structure, in contrast,
-hasn't changed — and once we've identified it, modifying the bytes
-in place is deterministic and survives game updates that don't
-change the DT layout itself.
+The legacy "zero all quantities" approach is preserved below in
+zero_all_quantities() for reference but should NOT be used: setting
+required=0 leaves slots that can't receive delivery events, so the
+state machine never advances and the construction stays stuck.
 """
 from __future__ import annotations
 
 import os
+import shutil
 import struct
+import sys
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import Dict, List, Tuple
+
+# Resolve sibling packages when imported from outside src/
+_SRC_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
 
 
 # Plausibility bounds for cargo-array detection. Tightening these
@@ -284,3 +287,166 @@ def deploy_free_construction(unpacked_root: str = '',
         'mod_tree_path': dst_dir,
         'source': src_dir,
     }
+
+
+# ==========================================================================
+# v6 mod-pak path (CORRECTED layout) — the working approach as of 2026-05-08
+# ==========================================================================
+
+# Vanilla Depot offsets in Buildings_Houses.uexp.
+# These are the start of the Materials TMap count field. The TMap layout is:
+#   [int32 count][count × (name_idx, name_inst, value)]
+# Depot_01 vanilla: 5 entries = Concrete=10, Sand=10, WoodPlank=2, H-Beam=2, Pipes=2
+# Depot_02 vanilla: 5 entries = Concrete=15, Sand=15, WoodPlank=4, H-Beam=3, Pipes=3
+DEPOT_TARGETS = [
+    {'name': 'Depot_02', 'count_offset': 0x4c8, 'vanilla_count': 5},
+    {'name': 'Depot_01', 'count_offset': 0x408, 'vanilla_count': 5},
+]
+
+# Sand's name index in Buildings_Houses.uasset name table. We're keeping
+# Sand because it's the only trivial-to-acquire material on the Depot
+# requirements list — Concrete/WoodPlank/H-Beam/PlasticPipes all involve
+# multi-step production chains.
+SAND_NAME_IDX = 24
+
+# .uasset Export[0].SerialSize lives at this byte offset. SerialSize must
+# match the new (shrunk) .uexp size minus the 4-byte footer.
+EXPORT_SERIAL_SIZE_OFFSET = 176489 + 28
+
+# Each TMap entry is name_idx + name_inst + value, all int32.
+ENTRY_SIZE = 12
+
+
+def shrink_materials_tmap_to_sand(uexp: bytes,
+                                  count_offset: int,
+                                  vanilla_count: int,
+                                  target_value: int = 1) -> bytes:
+    """Shrink a Materials TMap at count_offset down to a single
+    Sand=target_value entry.
+
+    Returns the new uexp bytes; size shrinks by (vanilla_count - 1) * 12.
+    """
+    found = struct.unpack_from('<i', uexp, count_offset)[0]
+    if found != vanilla_count:
+        raise ValueError(
+            f'Expected count={vanilla_count} at 0x{count_offset:x}, got {found}')
+
+    entries_end = count_offset + 4 + vanilla_count * ENTRY_SIZE
+    sand_entry = struct.pack('<iii', SAND_NAME_IDX, 0, target_value)
+    return (
+        uexp[:count_offset] +
+        struct.pack('<i', 1) +
+        sand_entry +
+        uexp[entries_end:]
+    )
+
+
+def generate_free_depots_pak(output_pak_path: str,
+                             vanilla_uasset: bytes = None,
+                             vanilla_uexp: bytes = None) -> Dict:
+    """Generate a mod-pak that makes both Depot_01 and Depot_02 buildable
+    from a single Sand cargo delivery.
+
+    The pak modifies Buildings_Houses.uexp by shrinking each depot row's
+    Materials TMap from 5 entries to 1 entry (Sand=1). The .uasset's
+    Export[0].SerialSize is updated to match. After installation, the
+    architect blueprint price stays the same — only the construction
+    delivery requirements change.
+
+    Args:
+      output_pak_path:  Where to write the .pak file (e.g.
+                        ~/Motor Town/Content/Paks/ZZZ_FrogModFreeDepots_P.pak).
+      vanilla_uasset:   Optional in-memory vanilla Buildings_Houses.uasset
+                        bytes. If omitted, reads from the bundled vanilla
+                        copy (data/vanilla/Buildings/) or the user's
+                        unpacked folder.
+      vanilla_uexp:     Same, for Buildings_Houses.uexp.
+
+    Returns:
+      {success: bool, pak_path: str, pak_size: int,
+       targets_modified: List[str], bytes_removed: int}
+       — or {success: False, error: str} on failure.
+    """
+    # Lazy-import the pak writer to avoid a circular import in the
+    # parsers package's __init__.
+    from parsers.pak_writer import write_pak
+
+    if vanilla_uasset is None or vanilla_uexp is None:
+        src_dir = _resolve_buildings_source_dir()
+        if not src_dir:
+            return {
+                'success': False,
+                'error': 'Vanilla Buildings_Houses files not available. '
+                         'The editor usually ships these in '
+                         'data/vanilla/Buildings/.'
+            }
+        with open(os.path.join(src_dir, 'Buildings_Houses.uasset'), 'rb') as f:
+            vanilla_uasset = f.read()
+        with open(os.path.join(src_dir, 'Buildings_Houses.uexp'), 'rb') as f:
+            vanilla_uexp = f.read()
+
+    # Apply target shrinks in descending count_offset order so earlier
+    # modifications don't shift later target offsets.
+    new_uexp = vanilla_uexp
+    targets_done: List[str] = []
+    total_shrink = 0
+    for tgt in sorted(DEPOT_TARGETS, key=lambda t: -t['count_offset']):
+        before = len(new_uexp)
+        try:
+            new_uexp = shrink_materials_tmap_to_sand(
+                new_uexp, tgt['count_offset'], tgt['vanilla_count'])
+        except ValueError as exc:
+            return {
+                'success': False,
+                'error': (
+                    f'Layout mismatch for {tgt["name"]}: {exc}. '
+                    f'Game version may have changed. Update '
+                    f'DEPOT_TARGETS in uexp_buildings_dt.py.'),
+            }
+        total_shrink += before - len(new_uexp)
+        targets_done.append(tgt['name'])
+
+    # Update .uasset Export[0].SerialSize
+    vanilla_serial = struct.unpack_from(
+        '<q', vanilla_uasset, EXPORT_SERIAL_SIZE_OFFSET)[0]
+    new_serial = vanilla_serial - total_shrink
+    new_uasset = bytearray(vanilla_uasset)
+    struct.pack_into('<q', new_uasset, EXPORT_SERIAL_SIZE_OFFSET, new_serial)
+    new_uasset = bytes(new_uasset)
+
+    # Stage the files in a temp directory mirroring the pak's internal
+    # path structure: MotorTown/Content/DataAsset/Buildings/...
+    pak_dir = os.path.dirname(os.path.abspath(output_pak_path))
+    os.makedirs(pak_dir, exist_ok=True)
+    stage_root = os.path.join(pak_dir, '.frogmod_freedepots_staging')
+    if os.path.exists(stage_root):
+        shutil.rmtree(stage_root, ignore_errors=True)
+    stage_dir = os.path.join(
+        stage_root, 'MotorTown', 'Content', 'DataAsset', 'Buildings')
+    os.makedirs(stage_dir, exist_ok=True)
+    try:
+        with open(os.path.join(stage_dir, 'Buildings_Houses.uasset'), 'wb') as f:
+            f.write(new_uasset)
+        with open(os.path.join(stage_dir, 'Buildings_Houses.uexp'), 'wb') as f:
+            f.write(new_uexp)
+
+        # Pack. write_pak preserves the directory name as the pak's
+        # root, so we point it at MotorTown/ inside the staging tree.
+        pack_root = os.path.join(stage_root, 'MotorTown')
+        if os.path.exists(output_pak_path):
+            os.remove(output_pak_path)
+        result = write_pak(pack_root, output_pak_path)
+
+        return {
+            'success': True,
+            'pak_path': output_pak_path,
+            'pak_size': result.get('pak_size', 0),
+            'targets_modified': targets_done,
+            'bytes_removed': total_shrink,
+            'serial_size_before': vanilla_serial,
+            'serial_size_after': new_serial,
+        }
+    finally:
+        # Clean up staging
+        if os.path.exists(stage_root):
+            shutil.rmtree(stage_root, ignore_errors=True)
