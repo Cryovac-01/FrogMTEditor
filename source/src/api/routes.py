@@ -1560,7 +1560,16 @@ def _register_engine_datatable_entry(ua: bytes, ue: bytes, engine_name: str,
     # Apply the user's level requirements (if provided) before building
     # the row. Adds any missing CL_* enum FNames to the .uasset name
     # table first so the FName indices we encode are valid.
-    if level_requirements is not None:
+    #
+    # An EMPTY dict {} is treated as "user didn't specify any" — same as
+    # None — to skip the LR rewrite entirely. Previously {} entered the
+    # rewrite path, which used a heuristic FString anchor on the donor's
+    # row tail that could misidentify a position in some donor variants
+    # and corrupt the row. With the donor's existing LR section left in
+    # place, the row stays structurally valid. (Caller in create_engine
+    # initializes _level_requirements to {} by default, so this guard
+    # is what protects users who don't touch the Level Requirements UI.)
+    if level_requirements:
         # Make sure every CL_* enum name we might need (including ones
         # in the donor's existing TMap) is present in the .uasset name
         # table. Cheap to just request all 7 — append_names_if_missing
